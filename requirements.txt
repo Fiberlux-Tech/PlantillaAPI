@@ -1,0 +1,8 @@
+Flask
+pandas
+numpy
+numpy-financial
+openpyxl
+Flask-Cors
+Flask-SQLAlchemy
+Flask-Migrate

@@ -1,0 +1,226 @@
+import pandas as pd
+import numpy as np
+import numpy_financial as npf
+from flask import current_app
+from . import db
+from .models import Transaction, FixedCost, RecurringService
+import json
+
+
+# --- HELPER FUNCTIONS ---
+
+def _convert_numpy_types(obj):
+    """
+    Recursively converts numpy numeric types in a dictionary or list to standard Python types
+    to ensure proper JSON serialization.
+    """
+    if isinstance(obj, dict):
+        return {k: _convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_numpy_types(i) for i in obj]
+    elif isinstance(obj, (np.int64, np.int32, np.int16, np.int8)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32)):
+        if np.isnan(obj):
+            return None
+        return float(obj)
+    elif pd.isna(obj):
+        return None
+    return obj
+
+
+def _calculate_financial_metrics(data):
+    """
+    Private helper function to calculate financial metrics based on extracted data.
+    """
+    costoCapitalAnual = data.get('costoCapitalAnual', 0)
+    plazoContrato = int(data.get('plazoContrato', 0))
+    MRC = data.get('MRC', 0)
+    NRC = data.get('NRC', 0)
+    comisiones = data.get('comisiones', 0)
+    costoInstalacion = data.get('costoInstalacion', 0)
+    tipoCambio = data.get('tipoCambio', 1)
+
+    total_monthly_expense = sum(item.get('egreso', 0) for item in data.get('recurring_services', []))
+
+    totalRevenue = NRC + (MRC * plazoContrato)
+    upfront_costs = (costoInstalacion * tipoCambio) + comisiones
+    total_monthly_expense_converted = total_monthly_expense * tipoCambio
+    totalExpense = upfront_costs + (total_monthly_expense_converted * plazoContrato)
+    grossMargin = totalRevenue - totalExpense
+
+    initial_cash_flow = NRC - upfront_costs
+    cash_flows = [initial_cash_flow]
+    monthly_net_cash_flow = MRC - total_monthly_expense_converted
+    cash_flows.extend([monthly_net_cash_flow] * plazoContrato)
+
+    try:
+        monthly_discount_rate = costoCapitalAnual / 12
+        van = npf.npv(monthly_discount_rate, cash_flows)
+    except Exception:
+        van = None
+
+    try:
+        tir = npf.irr(cash_flows)
+    except Exception:
+        tir = None
+
+    cumulative_cash_flow = 0
+    payback = None
+    for i, flow in enumerate(cash_flows):
+        cumulative_cash_flow += flow
+        if cumulative_cash_flow >= 0:
+            payback = i
+            break
+
+    return {
+        'VAN': van, 'TIR': tir, 'payback': payback, 'totalRevenue': totalRevenue,
+        'totalExpense': totalExpense, 'comisionesRate': (comisiones / totalRevenue) if totalRevenue else 0,
+        'costoInstalacionRatio': (costoInstalacion / totalRevenue) if totalRevenue else 0,
+        'grossMargin': grossMargin, 'grossMarginRatio': (grossMargin / totalRevenue) if totalRevenue else 0,
+    }
+
+
+# --- MAIN SERVICE FUNCTIONS ---
+
+def process_excel_file(excel_file):
+    """
+    Orchestrates the entire process of reading, validating, and calculating data from the uploaded Excel file.
+    """
+    try:
+        # Access config variables from the current Flask app context
+        config = current_app.config
+
+        # Step 3: Read & Extract Data
+        header_data = {}
+        for var_name, cell in config['VARIABLES_TO_EXTRACT'].items():
+            df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None)
+            col_idx = ord(cell[0].upper()) - ord('A')
+            row_idx = int(cell[1:]) - 1
+            value = df.iloc[row_idx, col_idx]
+            header_data[var_name] = value
+
+        services_col_indices = [ord(c.upper()) - ord('A') for c in config['RECURRING_SERVICES_COLUMNS'].values()]
+        services_df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None,
+                                    skiprows=config['RECURRING_SERVICES_START_ROW'], usecols=services_col_indices)
+        services_df.columns = config['RECURRING_SERVICES_COLUMNS'].keys()
+        recurring_services_data = services_df.dropna(how='all').to_dict('records')
+
+        fixed_costs_col_indices = [ord(c.upper()) - ord('A') for c in config['FIXED_COSTS_COLUMNS'].values()]
+        fixed_costs_df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None,
+                                       skiprows=config['FIXED_COSTS_START_ROW'], usecols=fixed_costs_col_indices)
+        fixed_costs_df.columns = config['FIXED_COSTS_COLUMNS'].keys()
+        fixed_costs_data = fixed_costs_df.dropna(how='all').to_dict('records')
+
+        # Calculate totals for preview
+        for item in fixed_costs_data:
+            if pd.notna(item.get('cantidad')) and pd.notna(item.get('costoUnitario')):
+                item['total'] = item['cantidad'] * item['costoUnitario']
+
+        for item in recurring_services_data:
+            q = item.get('Q', 0);
+            p = item.get('P', 0);
+            cu1 = item.get('CU1', 0);
+            cu2 = item.get('CU2', 0)
+            item['ingreso'] = q * p
+            item['egreso'] = (cu1 + cu2) * q
+
+        calculated_costoInstalacion = sum(
+            item.get('total', 0) for item in fixed_costs_data if pd.notna(item.get('total')))
+
+        # Step 4: Validate Inputs
+        if pd.isna(header_data.get('clientName')) or pd.isna(header_data.get('MRC')):
+            return {"success": False, "error": "Required field 'Client Name' or 'MRC' is missing from the Excel file."}
+
+        # Consolidate all extracted data
+        full_extracted_data = {**header_data, 'recurring_services': recurring_services_data,
+                               'fixed_costs': fixed_costs_data, 'costoInstalacion': calculated_costoInstalacion}
+
+        # Step 5: Calculate Metrics
+        financial_metrics = _calculate_financial_metrics(full_extracted_data)
+
+        # Step 6: Assemble the Final Response
+        transaction_summary = {**header_data, **financial_metrics, "costoInstalacion": calculated_costoInstalacion,
+                               "submissionDate": None, "ApprovalStatus": "PENDING"}
+
+        final_data_package = {"transactions": transaction_summary, "fixed_costs": fixed_costs_data,
+                              "recurring_services": recurring_services_data}
+
+        clean_data = _convert_numpy_types(final_data_package)
+
+        return {"success": True, "data": clean_data}
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
+
+
+def save_transaction(data):
+    """
+    Saves a new transaction and its related costs to the database.
+    """
+    try:
+        tx_data = data.get('transactions', {})
+
+        # Create the main Transaction object
+        new_transaction = Transaction(
+            # ... (all the fields for the new transaction)
+            unidadNegocio=tx_data.get('unidadNegocio'), clientName=tx_data.get('clientName'),
+            companyID=tx_data.get('companyID'), salesman=tx_data.get('salesman'),
+            orderID=tx_data.get('orderID'), tipoCambio=tx_data.get('tipoCambio'),
+            MRC=tx_data.get('MRC'), NRC=tx_data.get('NRC'), VAN=tx_data.get('VAN'),
+            TIR=tx_data.get('TIR'), payback=tx_data.get('payback'),
+            totalRevenue=tx_data.get('totalRevenue'), totalExpense=tx_data.get('totalExpense'),
+            comisiones=tx_data.get('comisiones'), comisionesRate=tx_data.get('comisionesRate'),
+            costoInstalacion=tx_data.get('costoInstalacion'),
+            costoInstalacionRatio=tx_data.get('costoInstalacionRatio'),
+            grossMargin=tx_data.get('grossMargin'), grossMarginRatio=tx_data.get('grossMarginRatio'),
+            plazoContrato=tx_data.get('plazoContrato'), costoCapitalAnual=tx_data.get('costoCapitalAnual'),
+            ApprovalStatus='PENDING'
+        )
+        db.session.add(new_transaction)
+
+        # Loop through fixed costs and add them
+        for cost_item in data.get('fixed_costs', []):
+            new_cost = FixedCost(
+                transaction=new_transaction, categoria=cost_item.get('categoria'),
+                tipo_servicio=cost_item.get('tipo_servicio'), ticket=cost_item.get('ticket'),
+                ubicacion=cost_item.get('ubicacion'), cantidad=cost_item.get('cantidad'),
+                costoUnitario=cost_item.get('costoUnitario')
+            )
+            db.session.add(new_cost)
+
+        # Loop through recurring services and add them
+        for service_item in data.get('recurring_services', []):
+            new_service = RecurringService(
+                transaction=new_transaction, tipo_servicio=service_item.get('tipo_servicio'),
+                nota=service_item.get('nota'), ubicacion=service_item.get('ubicacion'),
+                Q=service_item.get('Q'), P=service_item.get('P'),
+                CU1=service_item.get('CU1'), CU2=service_item.get('CU2'),
+                proveedor=service_item.get('proveedor')
+            )
+            db.session.add(new_service)
+
+        # --- DIAGNOSTIC CHANGES ---
+        # 1. Force the session to "flush" the data and assign an ID to our new_transaction
+        db.session.flush()
+        new_id = new_transaction.id
+
+        # 2. Print a confirmation message to the terminal
+        print(f"--- DIAGNOSTIC: Attempting to commit transaction with temporary ID: {new_id} ---")
+
+        # Commit all the changes to the database
+        db.session.commit()
+
+        print(f"--- DIAGNOSTIC: Commit successful for transaction ID: {new_id} ---")
+
+        return {"success": True, "message": "Transaction saved successfully.", "transaction_id": new_id}
+
+    except Exception as e:
+        db.session.rollback()  # Roll back the transaction if any error occurs
+        import traceback
+        print("--- ERROR DURING SAVE ---")
+        print(traceback.format_exc())
+        print("--- END ERROR ---")
+        return {"success": False, "error": f"Database error: {str(e)}"}
