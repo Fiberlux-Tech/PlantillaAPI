@@ -143,6 +143,21 @@ def process_excel_file(excel_file):
     try:
         # Access config variables from the current Flask app context
         config = current_app.config
+        
+        # =========================================================
+        # FIX: Define the local helper function here
+        # =========================================================
+        def safe_float(val):
+            """Converts value to float, treating non-numeric/NaN values as 0.0."""
+            if pd.notna(val):
+                try:
+                    # Attempt to convert to float
+                    return float(val)
+                except (ValueError, TypeError):
+                    # Catch cases like unexpected strings
+                    return 0.0
+            return 0.0
+        # =========================================================
 
         # Step 3: Read & Extract Data
         header_data = {}
@@ -169,10 +184,11 @@ def process_excel_file(excel_file):
                 item['total'] = item['cantidad'] * item['costoUnitario']
 
         for item in recurring_services_data:
-            q = item.get('Q', 0);
-            p = item.get('P', 0);
-            cu1 = item.get('CU1', 0);
-            cu2 = item.get('CU2', 0)
+            q = safe_float(item.get('Q', 0));
+            p = safe_float(item.get('P', 0));
+            cu1 = safe_float(item.get('CU1', 0));
+            cu2 = safe_float(item.get('CU2', 0))
+
             item['ingreso'] = q * p
             item['egreso'] = (cu1 + cu2) * q
 
