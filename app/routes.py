@@ -1,29 +1,26 @@
-from flask import current_app as app, request, jsonify
+from flask import Blueprint, request, jsonify
 from .services import process_excel_file, save_transaction, get_transactions, get_transaction_details, approve_transaction, reject_transaction
 from . import db
+
+# Create a Blueprint object named 'api'
+api = Blueprint('api', __name__)
 
 # Allowed file extensions for security
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# Change all decorators from @app.route to @api.route
+# and remove the '/api' prefix from the URL, since the Blueprint will handle it.
 
-@app.route('/api/process-excel', methods=['POST'])
+@api.route('/process-excel', methods=['POST'])
 def process_excel_route():
-    """
-    API endpoint to handle the initial Excel file upload and processing.
-    It receives the file, passes it to the service layer for processing,
-    and returns the structured data for the frontend preview.
-    """
     if 'file' not in request.files:
         return jsonify({"success": False, "error": "No file part in the request"}), 400
-
     file = request.files['file']
     if file.filename == '':
         return jsonify({"success": False, "error": "No file selected"}), 400
-
     if file and allowed_file(file.filename):
         result = process_excel_file(file)
         if result["success"]:
@@ -34,32 +31,19 @@ def process_excel_route():
         return jsonify(
             {"success": False, "error": "Invalid file type. Please upload an Excel file (.xlsx, .xls)."}), 400
 
-
-@app.route('/api/submit-transaction', methods=['POST'])
+@api.route('/submit-transaction', methods=['POST'])
 def submit_transaction_route():
-    """
-    API endpoint to handle the final submission of the transaction data.
-    It receives the complete JSON package from the frontend preview,
-    passes it to the service layer to be saved in the database,
-    and returns a success response.
-    """
     data = request.get_json()
     if not data:
         return jsonify({"success": False, "error": "No data provided in the request"}), 400
-
     result = save_transaction(data)
-
     if result["success"]:
         return jsonify(result)
     else:
-        # Use a 500 status code for a server-side database error
         return jsonify(result), 500
 
-@app.route('/api/transactions', methods=['GET'])
+@api.route('/transactions', methods=['GET'])
 def get_transactions_route():
-    """
-    API endpoint to retrieve a paginated list of transactions.
-    """
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 30, type=int)
     result = get_transactions(page=page, per_page=per_page)
@@ -68,33 +52,24 @@ def get_transactions_route():
     else:
         return jsonify(result), 500
 
-@app.route('/api/transaction/<string:transaction_id>', methods=['GET'])
+@api.route('/transaction/<string:transaction_id>', methods=['GET'])
 def get_transaction_details_route(transaction_id):
-    """
-    API endpoint to retrieve the full details of a single transaction by its ID.
-    """
     result = get_transaction_details(transaction_id)
     if result["success"]:
         return jsonify(result)
     else:
         return jsonify(result), 404
 
-@app.route('/api/transaction/approve/<string:transaction_id>', methods=['POST'])
+@api.route('/transaction/approve/<string:transaction_id>', methods=['POST'])
 def approve_transaction_route(transaction_id):
-    """
-    API endpoint to approve a transaction.
-    """
     result = approve_transaction(transaction_id)
     if result["success"]:
         return jsonify(result)
     else:
         return jsonify(result), 500
 
-@app.route('/api/transaction/reject/<string:transaction_id>', methods=['POST'])
+@api.route('/transaction/reject/<string:transaction_id>', methods=['POST'])
 def reject_transaction_route(transaction_id):
-    """
-    API endpoint to reject a transaction.
-    """
     result = reject_transaction(transaction_id)
     if result["success"]:
         return jsonify(result)

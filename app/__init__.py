@@ -4,27 +4,23 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 from .config import Config
 
-# Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
 
 def create_app():
-    """
-    Application factory function. Creates and configures the Flask app.
-    """
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # Initialize extensions with the app instance
     db.init_app(app)
     migrate.init_app(app, db)
-
-    # Configure CORS to allow requests from the frontend
     CORS(app)
 
-    # Register the API routes with the application
+    # Import the api blueprint from your routes file
+    from .routes import api as api_blueprint
+    # Register the blueprint and set its URL prefix
+    app.register_blueprint(api_blueprint, url_prefix='/api')
+
     with app.app_context():
-        from . import routes
         from . import models
 
     return app

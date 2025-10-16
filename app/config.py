@@ -10,7 +10,7 @@ class Config:
     """
     # --- Database Settings ---
     # This tells the application where to create and find the database file.
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'app.db')
+    SQLALCHEMY_DATABASE_URI = 'postgresql://plantilla_user:apsdo1209afhj8@localhost:5432/plantilla_db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # --- General Excel Settings ---
@@ -34,7 +34,7 @@ class Config:
 
     # --- Recurring Services Table Settings ---
     # Defines the starting row and the columns to extract for the services table.
-    RECURRING_SERVICES_START_ROW = 37
+    RECURRING_SERVICES_START_ROW = 36
     # NOTE: 'ingreso' and 'egreso' are removed as they are calculated internally
     RECURRING_SERVICES_COLUMNS = {
         'tipo_servicio': 'L',
@@ -49,7 +49,7 @@ class Config:
 
     # --- Fixed Costs Table Settings ---
     # Defines the starting row and the columns to extract for the fixed costs table.
-    FIXED_COSTS_START_ROW = 37
+    FIXED_COSTS_START_ROW = 36
     # NOTE: 'total' is removed as it is calculated internally
     FIXED_COSTS_COLUMNS = {
         'categoria': 'C',
