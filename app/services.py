@@ -91,7 +91,7 @@ def _calculate_financial_metrics(data):
     return {
         'VAN': van, 'TIR': tir, 'payback': payback, 'totalRevenue': totalRevenue,
         'totalExpense': totalExpense, 'comisionesRate': (comisiones / totalRevenue) if totalRevenue else 0,
-        'costoInstalacionRatio': (costoInstalacion / totalRevenue) if totalRevenue else 0,
+        'costoInstalacionRatio': (costoInstalacion * tipoCambio / totalRevenue) if totalRevenue else 0,
         'grossMargin': grossMargin, 'grossMarginRatio': (grossMargin / totalRevenue) if totalRevenue else 0,
     }
 
@@ -166,7 +166,13 @@ def process_excel_file(excel_file):
             col_idx = ord(cell[0].upper()) - ord('A')
             row_idx = int(cell[1:]) - 1
             value = df.iloc[row_idx, col_idx]
-            header_data[var_name] = value
+
+            # Apply safe_float ONLY to fields expected to be numeric
+            if var_name in ['MRC', 'NRC', 'costoCapitalAnual', 'plazoContrato', 'comisiones', 'tipoCambio', 'companyID', 'orderID']: 
+                header_data[var_name] = safe_float(value)
+            else:
+                # Keep as is for string fields like clientName, salesman
+                header_data[var_name] = value
 
         services_col_indices = [ord(c.upper()) - ord('A') for c in config['RECURRING_SERVICES_COLUMNS'].values()]
         services_df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None, skiprows=config['RECURRING_SERVICES_START_ROW'], usecols=services_col_indices)
