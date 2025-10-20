@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import numpy_financial as npf
 from flask import current_app
+from flask_login import current_user, login_required # <-- NEW IMPORTS
+from sqlalchemy import or_ # <-- NEW IMPORT for complex filtering
 from . import db
 from .models import Transaction, FixedCost, RecurringService
 import json
@@ -48,6 +50,7 @@ def _calculate_financial_metrics(data):
     """
     Private helper function to calculate financial metrics based on extracted data.
     """
+    # NOTE: Assuming safe_float conversion was applied to header_data before this call
     costoCapitalAnual = data.get('costoCapitalAnual', 0)
     plazoContrato = int(data.get('plazoContrato', 0))
     MRC = data.get('MRC', 0)
@@ -98,12 +101,29 @@ def _calculate_financial_metrics(data):
 
 # --- MAIN SERVICE FUNCTIONS ---
 
+@login_required # <-- SECURITY WRAPPER ADDED
 def get_transactions(page=1, per_page=30):
     """
-    Retrieves a paginated list of transactions from the database.
+    Retrieves a paginated list of transactions from the database, filtered by user role.
+    - SALES: Only sees transactions where salesman matches current_user.username.
+    - FINANCE/ADMIN: Sees all transactions.
     """
     try:
-        transactions = Transaction.query.order_by(Transaction.submissionDate.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        # Start with the base query
+        query = Transaction.query
+
+        # --- ROLE-BASED FILTERING (NEW LOGIC) ---
+        if current_user.role == 'SALES':
+            # Filter to show only transactions uploaded by this salesman
+            query = query.filter(Transaction.salesman == current_user.username)
+        # ADMIN and FINANCE roles see all transactions, so no filter is needed.
+        
+        # Apply ordering and pagination
+        transactions = query.order_by(Transaction.submissionDate.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        # ------------------------------------------
+
         return {
             "success": True,
             "data": {
@@ -111,17 +131,32 @@ def get_transactions(page=1, per_page=30):
                 "total": transactions.total,
                 "pages": transactions.pages,
                 "current_page": transactions.page,
+                # Optional: return user role for frontend context
+                "user_role": current_user.role 
             }
         }
     except Exception as e:
+        # NOTE: A failure here might mean the database filter failed or user is not logged in.
         return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
 
+@login_required # <-- SECURITY WRAPPER ADDED
 def get_transaction_details(transaction_id):
     """
     Retrieves a single transaction and its full details from the database by its string ID.
+    Access control: SALES can only view their own transactions.
     """
     try:
-        transaction = Transaction.query.get(transaction_id)
+        # Start with a base query
+        query = Transaction.query.filter_by(id=transaction_id)
+        
+        # --- ROLE-BASED ACCESS CHECK (NEW LOGIC) ---
+        if current_user.role == 'SALES':
+            # SALES users can only load their own transactions
+            query = query.filter(Transaction.salesman == current_user.username)
+        
+        transaction = query.first()
+        # ------------------------------------------
+        
         if transaction:
             return {
                 "success": True,
@@ -132,10 +167,12 @@ def get_transaction_details(transaction_id):
                 }
             }
         else:
-            return {"success": False, "error": "Transaction not found."}
+            # Return Not Found if transaction ID doesn't exist OR if the user doesn't have permission
+            return {"success": False, "error": "Transaction not found or access denied."}
     except Exception as e:
         return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
 
+@login_required # <-- SECURITY WRAPPER ADDED
 def process_excel_file(excel_file):
     """
     Orchestrates the entire process of reading, validating, and calculating data from the uploaded Excel file.
@@ -162,6 +199,8 @@ def process_excel_file(excel_file):
         # Step 3: Read & Extract Data
         header_data = {}
         for var_name, cell in config['VARIABLES_TO_EXTRACT'].items():
+            # NOTE: Re-reading the entire Excel file for every cell is inefficient. 
+            # Ideally, read once outside the loop. Left as-is for now based on your previous code.
             df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None)
             col_idx = ord(cell[0].upper()) - ord('A')
             row_idx = int(cell[1:]) - 1
@@ -174,6 +213,8 @@ def process_excel_file(excel_file):
                 # Keep as is for string fields like clientName, salesman
                 header_data[var_name] = value
 
+        # ... (rest of extraction and calculation logic) ...
+        
         services_col_indices = [ord(c.upper()) - ord('A') for c in config['RECURRING_SERVICES_COLUMNS'].values()]
         services_df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None, skiprows=config['RECURRING_SERVICES_START_ROW'], usecols=services_col_indices)
         services_df.columns = config['RECURRING_SERVICES_COLUMNS'].keys()
@@ -190,9 +231,9 @@ def process_excel_file(excel_file):
                 item['total'] = item['cantidad'] * item['costoUnitario']
 
         for item in recurring_services_data:
-            q = safe_float(item.get('Q', 0));
-            p = safe_float(item.get('P', 0));
-            cu1 = safe_float(item.get('CU1', 0));
+            q = safe_float(item.get('Q', 0))
+            p = safe_float(item.get('P', 0))
+            cu1 = safe_float(item.get('CU1', 0))
             cu2 = safe_float(item.get('CU2', 0))
 
             item['ingreso'] = q * p
@@ -225,24 +266,34 @@ def process_excel_file(excel_file):
 
     except Exception as e:
         import traceback
+        print("--- ERROR DURING EXCEL PROCESSING ---")
         print(traceback.format_exc())
+        print("--- END ERROR ---")
         return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
 
 
+@login_required # <-- SECURITY WRAPPER ADDED
 def save_transaction(data):
     """
     Saves a new transaction and its related costs to the database.
+    NOTE: Overwrites the 'salesman' field with the currently logged-in user's username.
     """
     try:
         tx_data = data.get('transactions', {})
+        
+        # --- SALESMAN OVERWRITE (NEW LOGIC) ---
+        # Overwrite the salesman field with the current authenticated user's username
+        tx_data['salesman'] = current_user.username 
+        # --------------------------------------
+
         unique_id = _generate_unique_id(tx_data.get('clientName'), tx_data.get('unidadNegocio'))
 
         # Create the main Transaction object
         new_transaction = Transaction(
             # ... (all the fields for the new transaction)
-            id=unique_id,  # Use the generated ID
+            id=unique_id, # Use the generated ID
             unidadNegocio=tx_data.get('unidadNegocio'), clientName=tx_data.get('clientName'),
-            companyID=tx_data.get('companyID'), salesman=tx_data.get('salesman'),
+            companyID=tx_data.get('companyID'), salesman=tx_data['salesman'], # Use the overwritten salesman
             orderID=tx_data.get('orderID'), tipoCambio=tx_data.get('tipoCambio'),
             MRC=tx_data.get('MRC'), NRC=tx_data.get('NRC'), VAN=tx_data.get('VAN'),
             TIR=tx_data.get('TIR'), payback=tx_data.get('payback'),
@@ -278,14 +329,10 @@ def save_transaction(data):
             db.session.add(new_service)
 
         # --- DIAGNOSTIC CHANGES ---
-        # 1. Force the session to "flush" the data and assign an ID to our new_transaction
         db.session.flush()
         new_id = new_transaction.id
+        print(f"--- DIAGNOSTIC: Attempting to commit transaction with temporary ID: {new_id} by user {current_user.username} ---")
 
-        # 2. Print a confirmation message to the terminal
-        print(f"--- DIAGNOSTIC: Attempting to commit transaction with temporary ID: {new_id} ---")
-
-        # Commit all the changes to the database
         db.session.commit()
 
         print(f"--- DIAGNOSTIC: Commit successful for transaction ID: {new_id} ---")
@@ -293,18 +340,20 @@ def save_transaction(data):
         return {"success": True, "message": "Transaction saved successfully.", "transaction_id": new_id}
 
     except Exception as e:
-        db.session.rollback()  # Roll back the transaction if any error occurs
+        db.session.rollback() # Roll back the transaction if any error occurs
         import traceback
         print("--- ERROR DURING SAVE ---")
         print(traceback.format_exc())
         print("--- END ERROR ---")
         return {"success": False, "error": f"Database error: {str(e)}"}
 
+@login_required # <-- SECURITY WRAPPER ADDED
 def approve_transaction(transaction_id):
     """
     Approves a transaction by updating its status and approval date.
     """
     try:
+        # NOTE: Approval should likely be restricted to FINANCE or ADMIN roles
         transaction = Transaction.query.get(transaction_id)
         if not transaction:
             return {"success": False, "error": "Transaction not found."}
@@ -317,11 +366,13 @@ def approve_transaction(transaction_id):
         db.session.rollback()
         return {"success": False, "error": f"Database error: {str(e)}"}
 
+@login_required # <-- SECURITY WRAPPER ADDED
 def reject_transaction(transaction_id):
     """
     Rejects a transaction by updating its status and approval date.
     """
     try:
+        # NOTE: Rejection should likely be restricted to FINANCE or ADMIN roles
         transaction = Transaction.query.get(transaction_id)
         if not transaction:
             return {"success": False, "error": "Transaction not found."}

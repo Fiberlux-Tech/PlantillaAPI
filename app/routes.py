@@ -11,8 +11,6 @@ ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Change all decorators from @app.route to @api.route
-# and remove the '/api' prefix from the URL, since the Blueprint will handle it.
 
 @api.route('/process-excel', methods=['POST'])
 def process_excel_route():
