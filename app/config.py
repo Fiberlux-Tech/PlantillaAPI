@@ -1,10 +1,11 @@
+# config.py
+
 import os
-from dotenv import load_dotenv  # <-- NEW IMPORT
+from dotenv import load_dotenv
 
 # Get the base directory of the application
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# --- NEW: Load environment variables ---
 # This line finds the .env file in your root directory and loads it.
 load_dotenv(os.path.join(basedir, '..', '.env'))
 # --------------------------------------
@@ -24,8 +25,17 @@ class Config:
 
     # --- Secret Key ---
     # Reads the secret key from the .env file.
-    # CRITICAL: Always set this in production.
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-must-set-a-default-key'
+
+    # --- MASTER VARIABLES CONFIGURATION (NEW) ---
+    # This is the central control point for modularity.
+    MASTER_VARIABLE_ROLES = {
+        'tipoCambio': {'category': 'FINANCIAL', 'write_role': 'FINANCE'},
+        'costoCapital': {'category': 'FINANCIAL', 'write_role': 'FINANCE'},
+        # Example for future variable, can be added later by Ops/Sales:
+        # 'fibraUnitCost': {'category': 'UNITARY_COST', 'write_role': 'SALES'},
+    }
+
     
     # --- General Excel Settings ---
     # These are not secrets, so they can remain hardcoded.
@@ -39,9 +49,7 @@ class Config:
         'companyID': 'D9',
         'salesman': 'D11',
         'orderID': 'D13',
-        'tipoCambio': 'D15',
         'plazoContrato': 'D19',
-        'costoCapitalAnual': 'D17',
         'MRC': 'H9',
         'NRC': 'H11',
         'comisiones': 'H23',

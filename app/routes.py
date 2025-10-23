@@ -1,10 +1,8 @@
 # routes.py
 
-from flask import Blueprint, request, jsonify
-# 1. NEW: Import login_required from flask_login (standard security for all routes)
-from flask_login import login_required 
-# 2. NEW: Import the custom RBAC decorators from the new utils.py file
-from .utils import admin_required, finance_admin_required 
+from flask import Blueprint, request, jsonify, current_app
+from flask_login import login_required, current_user
+from .utils import admin_required, finance_admin_required, get_editable_categories # <-- get_editable_categories is new
 from .services import (
     process_excel_file, 
     save_transaction, 
@@ -15,7 +13,9 @@ from .services import (
     recalculate_commission_and_metrics,
     get_all_users, 
     update_user_role, 
-    reset_user_password
+    reset_user_password,
+    get_all_master_variables,
+    update_master_variable
 )
 from . import db
 
@@ -28,6 +28,69 @@ ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# --- MASTER VARIABLE ROUTES (NEW) ---
+
+@api.route('/master-variables', methods=['GET'])
+@login_required # Everyone can view (as required)
+def master_variables_route():
+    """
+    Returns the historical record of master variables.
+    """
+    category = request.args.get('category')
+    result = get_all_master_variables(category)
+    return jsonify(result), (200 if result["success"] else 400)
+
+@api.route('/master-variables/update', methods=['POST'])
+@login_required 
+def update_master_variable_route():
+    """
+    Updates a master variable, with dynamic RBAC enforced in the service layer.
+    """
+    data = request.get_json()
+    variable_name = data.get('variable_name')
+    value = data.get('variable_value')
+
+    if not variable_name or value is None:
+        return jsonify({"success": False, "error": "Missing variable_name or variable_value."}), 400
+
+    result = update_master_variable(variable_name, value)
+    
+    # Return appropriate status code based on service success/failure (including 403 from RBAC)
+    if result["success"]:
+        return jsonify(result), 200
+    else:
+        # NOTE: The update_master_variable service now returns a tuple (dict, status_code) on error.
+        # Check if the service returned a custom error status code (like 403)
+        status_code = 400
+        if isinstance(result, tuple) and len(result) == 2:
+             status_code = result[1]
+             result = result[0]
+             
+        return jsonify(result), status_code
+
+@api.route('/master-variables/categories', methods=['GET'])
+@login_required
+def get_user_categories_route():
+    """
+    Returns a list of categories the current user is authorized to edit.
+    Used for frontend UI filtering.
+    """
+    categories = get_editable_categories()
+    
+    # --- FIXED: Use current_app to fetch the dictionary for filtering ---
+    MASTER_VARIABLE_ROLES = current_app.config['MASTER_VARIABLE_ROLES']
+    
+    # Filter the full config to only include variables from categories the user can edit
+    editable_variables = {}
+    for name, config in MASTER_VARIABLE_ROLES.items():
+        if config['category'] in categories:
+            editable_variables[name] = config
+
+    return jsonify({
+        "success": True,
+        "editable_categories": categories,
+        "editable_variables": editable_variables,
+    }), 200
 
 @api.route('/process-excel', methods=['POST'])
 @login_required # Standard security: must be logged in to upload

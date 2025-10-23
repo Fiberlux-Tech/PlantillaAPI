@@ -1,3 +1,5 @@
+# __init__.py
+
 import os 
 from flask import Flask, jsonify # <-- Make sure jsonify is imported
 from flask_sqlalchemy import SQLAlchemy

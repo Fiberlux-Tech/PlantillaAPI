@@ -37,3 +37,29 @@ def finance_admin_required(f):
             
         return f(*args, **kwargs)
     return decorated_function
+
+def get_editable_categories():
+    """
+    Returns a list of unique categories the current user's role is authorized to edit.
+    Used by the frontend to dynamically populate menus.
+    """
+    if not current_user.is_authenticated:
+        return []
+    
+    # 1. Access the configuration dictionary safely via current_app
+    MASTER_VARIABLE_ROLES = current_app.config['MASTER_VARIABLE_ROLES']
+    
+    editable_categories = set()
+    user_role = current_user.role
+    
+    # 2. FIXED LOGIC: Ensure correct retrieval of all unique categories
+    if user_role == 'ADMIN':
+        # Retrieve all unique category names for the ADMIN role
+        return list(set(config['category'] for config in MASTER_VARIABLE_ROLES.values()))
+
+    # 3. Logic for other roles (FINANCE, SALES, etc.)
+    for config in MASTER_VARIABLE_ROLES.values():
+        if config['write_role'] == user_role:
+            editable_categories.add(config['category'])
+            
+    return list(editable_categories)

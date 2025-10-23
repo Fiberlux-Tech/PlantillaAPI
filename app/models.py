@@ -1,8 +1,8 @@
+# models.py
+
 from . import db
 from datetime import datetime
 from sqlalchemy.ext.hybrid import hybrid_property
-
-# --- NEW IMPORTS REQUIRED FOR THE USER MODEL ---
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 # --------------------------------------------------
@@ -190,4 +190,33 @@ class RecurringService(db.Model):
             'proveedor': self.proveedor,
             'ingreso': self.ingreso,
             'egreso': self.egreso
+        }
+    
+# --- 5. NEW: MASTER VARIABLE MODEL ---
+class MasterVariable(db.Model):
+    """
+    Centralized table for system-critical variables (e.g., exchange rates, costs, thresholds).
+    Stores a historical record of all changes for audit purposes.
+    """
+    __tablename__ = 'master_variable'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    variable_name = db.Column(db.String(64), nullable=False, index=True)
+    variable_value = db.Column(db.Float, nullable=False)
+    category = db.Column(db.String(64), nullable=False, index=True) # E.g., 'FINANCIAL', 'UNITARY_COST'
+    date_recorded = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Tracks who made the change
+    
+    # Relationship to the user who recorded the variable (optional, for convenience)
+    recorder = db.relationship('User', backref='master_variables', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'variable_name': self.variable_name,
+            'variable_value': self.variable_value,
+            'category': self.category,
+            'date_recorded': self.date_recorded.isoformat(),
+            'user_id': self.user_id,
+            'recorder_username': self.recorder.username if self.recorder else None
         }

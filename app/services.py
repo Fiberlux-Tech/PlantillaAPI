@@ -1,11 +1,13 @@
+# services.py
+
 import pandas as pd
 import numpy as np
 import numpy_financial as npf
 from flask import current_app
-from flask_login import current_user, login_required # <-- NEW IMPORTS
-from sqlalchemy import or_ # <-- NEW IMPORT for complex filtering
+from flask_login import current_user, login_required
+from sqlalchemy import or_, desc, func 
 from . import db
-from .models import Transaction, FixedCost, RecurringService, User
+from .models import Transaction, FixedCost, RecurringService, User, MasterVariable
 import json
 from datetime import datetime
 
@@ -29,7 +31,6 @@ def _generate_unique_id(customer_name, business_unit):
     # 3. Construct the new ID
     return f"FLX{year_part}{unit_part}-{datetime_micro_part}"
 
-
 def _convert_numpy_types(obj):
     """
     Recursively converts numpy numeric types in a dictionary or list to standard Python types
@@ -48,7 +49,6 @@ def _convert_numpy_types(obj):
     elif pd.isna(obj):
         return None
     return obj
-
 
 def _calculate_financial_metrics(data):
     """
@@ -187,7 +187,6 @@ def _calculate_estado_commission(transaction):
 
     return final_commission_amount
 
-
 def _calculate_gigalan_commission(transaction):
     """
     Calculates the GIGALAN commission using the data stored in the transaction model
@@ -281,7 +280,6 @@ def _calculate_gigalan_commission(transaction):
     # --- 7. Return only the final commission amount (float) ---
     return calculated_commission
 
-
 def _calculate_corporativo_commission(transaction):
     """
     Placeholder logic for 'CORPORATIVO' (No rules defined yet).
@@ -295,7 +293,6 @@ def _calculate_corporativo_commission(transaction):
     limit_mrc_amount = 1.2 * mrc
     
     return min(calculated_commission, limit_mrc_amount)
-
 
 def _calculate_final_commission(transaction):
     """
@@ -311,6 +308,108 @@ def _calculate_final_commission(transaction):
         return _calculate_corporativo_commission(transaction)
     else:
         return 0.0
+
+# --- NEW: MASTER VARIABLE SERVICES ---
+
+@login_required
+def get_all_master_variables(category=None):
+    """
+    Retrieves all records for master variables, filtered by category if provided.
+    (Supports the "EVERYONE CAN VIEW" requirement)
+    """
+    try:
+        query = MasterVariable.query.order_by(MasterVariable.date_recorded.desc())
+        
+        if category:
+            query = query.filter_by(category=category.upper())
+
+        variables = query.all()
+        
+        return {
+            "success": True,
+            "data": [v.to_dict() for v in variables]
+        }
+    except Exception as e:
+        return {"success": False, "error": f"Database error fetching master variables: {str(e)}"}
+
+@login_required
+def update_master_variable(variable_name, value):
+    """
+    Inserts a new record for a master variable, enforcing RBAC based on config.
+    """
+    config = current_app.config
+    variable_config = config['MASTER_VARIABLE_ROLES'].get(variable_name)
+
+    # 1. Input Validation (checks if the variable is registered)
+    if not variable_config:
+        return {"success": False, "error": f"Variable name '{variable_name}' is not a registered master variable."}, 400
+    
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return {"success": False, "error": "Variable value must be a valid number."}, 400
+
+    # 2. RBAC Enforcement (Security Check)
+    required_role = variable_config['write_role']
+    variable_category = variable_config['category']
+    
+    # ADMIN is always authorized. Other roles must match the required role.
+    if current_user.role != 'ADMIN' and current_user.role != required_role:
+        return {"success": False, "error": f"Permission denied. Only {required_role} can update the {variable_category} category."}, 403
+
+    try:
+        # 3. Create a new record (historical audit)
+        new_variable = MasterVariable(
+            variable_name=variable_name,
+            variable_value=value,
+            category=variable_category,
+            user_id=current_user.id 
+        )
+        
+        db.session.add(new_variable)
+        db.session.commit()
+
+        return {"success": True, "message": f"Successfully updated {variable_name} to {value}."}
+
+    except Exception as e:
+        db.session.rollback()
+        return {"success": False, "error": f"Database error saving variable: {str(e)}"}, 500
+
+def get_latest_master_variables(variable_names):
+    """
+    Retrieves the single most recent value for a list of required variables.
+    Returns a dictionary: {variable_name: latest_value, ...}
+    """
+    if not variable_names:
+        return {}
+        
+    # 1. Find the latest date for each unique variable name
+    subquery = db.session.query(
+        MasterVariable.variable_name,
+        func.max(MasterVariable.date_recorded).label('latest_date')
+    ).filter(
+        MasterVariable.variable_name.in_(variable_names)
+    ).group_by(
+        MasterVariable.variable_name
+    ).subquery()
+    
+    # 2. Use the latest dates to select the full records
+    latest_records = db.session.query(MasterVariable).join(
+        subquery,
+        (MasterVariable.variable_name == subquery.c.variable_name) & 
+        (MasterVariable.date_recorded == subquery.c.latest_date)
+    ).all()
+    
+    # 3. Map to a clean dictionary
+    latest_values = {
+        record.variable_name: record.variable_value
+        for record in latest_records
+    }
+    
+    # 4. Fill in missing variables with None/Default if no history exists
+    final_result = {name: latest_values.get(name) for name in variable_names}
+    
+    return final_result
 
 # --- MAIN SERVICE FUNCTIONS ---
 
@@ -365,7 +464,7 @@ def recalculate_commission_and_metrics(transaction_id):
         db.session.rollback()
         return {"success": False, "error": f"Error during commission recalculation: {str(e)}"}
 
-@login_required # <-- SECURITY WRAPPER ADDED
+@login_required
 def get_transactions(page=1, per_page=30):
     """
     Retrieves a paginated list of transactions from the database, filtered by user role.
@@ -403,7 +502,7 @@ def get_transactions(page=1, per_page=30):
         # NOTE: A failure here might mean the database filter failed or user is not logged in.
         return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
 
-@login_required # <-- SECURITY WRAPPER ADDED
+@login_required
 def get_transaction_details(transaction_id):
     """
     Retrieves a single transaction and its full details from the database by its string ID.
@@ -436,18 +535,17 @@ def get_transaction_details(transaction_id):
     except Exception as e:
         return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
 
-@login_required # <-- SECURITY WRAPPER ADDED
+@login_required 
 def process_excel_file(excel_file):
     """
-    Orchestrates the entire process of reading, validating, and calculating data from the uploaded Excel file.
+    Orchestrates the entire process of reading, validating, and calculating data 
+    from the uploaded Excel file, using master variables for key financial rates.
     """
     try:
         # Access config variables from the current Flask app context
         config = current_app.config
         
-        # =========================================================
         # FIX: Define the local helper function here
-        # =========================================================
         def safe_float(val):
             """Converts value to float, treating non-numeric/NaN values as 0.0."""
             if pd.notna(val):
@@ -458,33 +556,42 @@ def process_excel_file(excel_file):
                     # Catch cases like unexpected strings
                     return 0.0
             return 0.0
-        # =========================================================
+
+        # --- NEW BLOCK: FETCH LATEST MASTER VARIABLES (Decoupling) ---
+        required_master_variables = ['tipoCambio', 'costoCapital']
+        latest_rates = get_latest_master_variables(required_master_variables)
+        
+        # Check if the necessary rates were found in the DB (CRITICAL VALIDATION)
+        if latest_rates.get('tipoCambio') is None or latest_rates.get('costoCapital') is None:
+             return {"success": False, "error": "Cannot calculate financial metrics. System rates (Tipo de Cambio or Costo Capital) are missing. Please ensure they have been set by the Finance department."}, 400
+        # --- END NEW BLOCK ---
+
 
         # Step 3: Read & Extract Data
         header_data = {}
         for var_name, cell in config['VARIABLES_TO_EXTRACT'].items():
-            # NOTE: Re-reading the entire Excel file for every cell is inefficient. 
-            # Ideally, read once outside the loop. Left as-is for now based on your previous code.
+            # NOTE: The config no longer contains 'tipoCambio' and 'costoCapitalAnual'
             df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None)
             col_idx = ord(cell[0].upper()) - ord('A')
             row_idx = int(cell[1:]) - 1
             value = df.iloc[row_idx, col_idx]
 
             # Apply safe_float ONLY to fields expected to be numeric
-            if var_name in ['MRC', 'NRC', 'costoCapitalAnual', 'plazoContrato', 'comisiones', 'tipoCambio', 'companyID', 'orderID']: 
+            if var_name in ['MRC', 'NRC', 'plazoContrato', 'comisiones', 'companyID', 'orderID']: 
                 header_data[var_name] = safe_float(value)
             else:
                 # Keep as is for string fields like clientName, salesman
                 header_data[var_name] = value
 
-        # =========================================================
-        # --- NEW CODE BLOCK: FORCE INITIAL COMMISSION TO ZERO ---
-        # The value read from the Excel sheet (H23) is ignored.
-        # This ensures the initial submission always shows 0 commission and
-        # calculates metrics assuming zero commission until Finance intervenes.
+        # FORCE INITIAL COMMISSION TO ZERO (unchanged logic)
         if 'comisiones' in header_data:
             header_data['comisiones'] = 0.0
-        # =========================================================
+        
+        # --- NEW BLOCK: INJECT MASTER VARIABLES INTO HEADER DATA ---
+        header_data['tipoCambio'] = latest_rates['tipoCambio']
+        # Map the Master Variable name 'costoCapital' to the Transaction Model name 'costoCapitalAnual'
+        header_data['costoCapitalAnual'] = latest_rates['costoCapital'] 
+        # --- END INJECTION ---
         
         services_col_indices = [ord(c.upper()) - ord('A') for c in config['RECURRING_SERVICES_COLUMNS'].values()]
         services_df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None, skiprows=config['RECURRING_SERVICES_START_ROW'], usecols=services_col_indices)
@@ -496,10 +603,10 @@ def process_excel_file(excel_file):
         fixed_costs_df.columns = config['FIXED_COSTS_COLUMNS'].keys()
         fixed_costs_data = fixed_costs_df.dropna(how='all').to_dict('records')
 
-        # Calculate totals for preview
+        # Calculate totals for preview (unchanged logic)
         for item in fixed_costs_data:
             if pd.notna(item.get('cantidad')) and pd.notna(item.get('costoUnitario')):
-                item['total'] = item['cantidad'] * item['costoUnitario']
+                item['total'] = item['cantidad'] * item['cantidad']
 
         for item in recurring_services_data:
             q = safe_float(item.get('Q', 0))
@@ -513,7 +620,7 @@ def process_excel_file(excel_file):
         calculated_costoInstalacion = sum(
             item.get('total', 0) for item in fixed_costs_data if pd.notna(item.get('total')))
 
-        # Step 4: Validate Inputs
+        # Step 4: Validate Inputs (unchanged logic)
         if pd.isna(header_data.get('clientName')) or pd.isna(header_data.get('MRC')):
             return {"success": False, "error": "Required field 'Client Name' or 'MRC' is missing from the Excel file."}
 
@@ -541,7 +648,6 @@ def process_excel_file(excel_file):
         print(traceback.format_exc())
         print("--- END ERROR ---")
         return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
-
 
 @login_required # <-- SECURITY WRAPPER ADDED
 def save_transaction(data):
@@ -689,7 +795,6 @@ def get_all_users():
     except Exception as e:
         return {"success": False, "error": f"Database error fetching users: {str(e)}"}
 
-
 @login_required 
 def update_user_role(user_id, new_role):
     """Updates the role of a specified user."""
@@ -710,7 +815,6 @@ def update_user_role(user_id, new_role):
     except Exception as e:
         db.session.rollback()
         return {"success": False, "error": f"Could not update role: {str(e)}"}
-
 
 @login_required 
 def reset_user_password(user_id, new_password):
