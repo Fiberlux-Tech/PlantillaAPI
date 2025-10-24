@@ -1,7 +1,7 @@
-# __init__.py
+# app/__init__.py
 
 import os 
-from flask import Flask, jsonify # <-- Make sure jsonify is imported
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -34,16 +34,25 @@ def create_app():
     login_manager.init_app(app) 
     
     # --- 1. SET THE CORRECT 401 HANDLER FOR A SPA ---
-    # This replaces your old 'login_manager.login_view'
     @login_manager.unauthorized_handler
     def unauthorized():
         # Send a 401 error, which React will catch
         return jsonify({"message": "Authentication required."}), 401
     
-    # --- 2. REGISTER BLUEPRINTS (No change from your original) ---
-    from .routes import api as api_blueprint
-    app.register_blueprint(api_blueprint, url_prefix='/api')
+    # --- 2. REGISTER BLUEPRINTS (REFACTORED) ---
+    
+    # Import the new blueprints from the app.api package
+    from .api.transactions import bp as transactions_bp
+    from .api.admin import bp as admin_bp
+    from .api.variables import bp as variables_bp
+    
+    # Register them all with the original '/api' prefix
+    # This ensures no frontend URLs need to change.
+    app.register_blueprint(transactions_bp, url_prefix='/api')
+    app.register_blueprint(admin_bp, url_prefix='/api')
+    app.register_blueprint(variables_bp, url_prefix='/api')
 
+    # Register the existing auth blueprint
     from .auth import bp as auth_blueprint
     app.register_blueprint(auth_blueprint, url_prefix='/auth') 
 

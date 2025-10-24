@@ -1,8 +1,34 @@
-# utils.py
+# app/utils.py
 
 from functools import wraps
 from flask import jsonify, current_app
 from flask_login import current_user
+
+# --- NEW: Helper variables/functions moved from routes.py ---
+ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def _handle_service_result(result, default_error_status=500):
+    """
+    Parses the result from a service function. 
+    If it's a tuple (error_dict, status_code), it uses the custom status code.
+    Otherwise, it assumes success (status 200) or uses the default error status.
+    """
+    # Check if the result is a tuple (error_dict, status_code)
+    if isinstance(result, tuple) and len(result) == 2:
+        error_dict, status_code = result
+        return jsonify(error_dict), status_code
+    
+    # If not a tuple, check the 'success' key in the dictionary
+    if result.get("success"):
+        return jsonify(result), 200
+    else:
+        # Fallback for general errors (e.g., from an older service method)
+        return jsonify(result), default_error_status
+# -----------------------------------------------------------
+
 
 def admin_required(f):
     """
