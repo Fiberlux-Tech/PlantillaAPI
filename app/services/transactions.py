@@ -393,7 +393,12 @@ def calculate_preview_metrics(request_data):
         # 5. Clean and return the results
         clean_metrics = _convert_numpy_types(financial_metrics)
         
-        return {"success": True, "data": clean_metrics}
+        # --- START FIX ---
+        # Merge the original transaction inputs with the newly calculated metrics.
+        # This ensures inputs like 'plazoContrato' are returned in the response.
+        final_data = {**transaction_data, **clean_metrics}
+        
+        return {"success": True, "data": final_data}
 
     except Exception as e:
         import traceback
