@@ -7,10 +7,11 @@ import numpy_financial as npf
 from flask import current_app
 from flask_login import current_user, login_required
 from app import db
-from app.models import Transaction, FixedCost, RecurringService
+from app.models import Transaction, FixedCost, RecurringService, User
 import json
 from datetime import datetime
 from .variables import get_latest_master_variables # <-- IMPORTANT: Import from sibling file
+from .email_service import send_new_transaction_email, send_status_update_email # <-- NEW: IMPORT EMAIL SERVICE
 
 # --- HELPER FUNCTIONS ---
 
@@ -734,6 +735,17 @@ def save_transaction(data):
 
         print(f"--- DIAGNOSTIC: Commit successful for transaction ID: {new_id} ---")
 
+        # --- NEW: SEND SUBMISSION EMAIL ---
+        try:
+            send_new_transaction_email(
+                salesman_name=current_user.username,
+                client_name=tx_data.get('clientName', 'N/A'),
+                salesman_email=current_user.email
+            )
+        except Exception as e:
+            # We log this error but do not fail the transaction
+            print(f"--- ERROR: Transaction saved, but email notification failed: {str(e)} ---")
+
         return {"success": True, "message": "Transaction saved successfully.", "transaction_id": new_id}
 
     except Exception as e:
@@ -764,6 +776,14 @@ def approve_transaction(transaction_id):
         transaction.ApprovalStatus = 'APPROVED'
         transaction.approvalDate = datetime.utcnow()
         db.session.commit()
+
+        # --- NEW: SEND APPROVAL EMAIL ---
+        try:
+            send_status_update_email(transaction, "APPROVED")
+        except Exception as e:
+            print(f"--- ERROR: Transaction approved, but email notification failed: {str(e)} ---")
+        # --------------------------------
+
         return {"success": True, "message": "Transaction approved successfully."}
     except Exception as e:
         db.session.rollback()
@@ -790,6 +810,14 @@ def reject_transaction(transaction_id):
         transaction.ApprovalStatus = 'REJECTED'
         transaction.approvalDate = datetime.utcnow()
         db.session.commit()
+
+        # --- NEW: SEND REJECTION EMAIL ---
+        try:
+            send_status_update_email(transaction, "REJECTED")
+        except Exception as e:
+            print(f"--- ERROR: Transaction rejected, but email notification failed: {str(e)} ---")
+        # ---------------------------------
+
         return {"success": True, "message": "Transaction rejected successfully."}
     except Exception as e:
         db.session.rollback()

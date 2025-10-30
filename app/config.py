@@ -27,6 +27,19 @@ class Config:
     # Reads the secret key from the .env file.
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-must-set-a-default-key'
 
+    # --- NEW: Email Settings ---
+    # Configuration for sending emails via Outlook/Microsoft 365 SMTP
+    MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.office365.com'
+    MAIL_PORT = int(os.environ.get('MAIL_PORT') or 587)
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS') is not None
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+    # This is the "specific email set before" you mentioned
+    MAIL_DEFAULT_RECIPIENT = os.environ.get('MAIL_DEFAULT_RECIPIENT')
+    # ---------------------------
+
+
+
     # --- MASTER VARIABLES CONFIGURATION (NEW) ---
     # This is the central control point for modularity.
     MASTER_VARIABLE_ROLES = {
