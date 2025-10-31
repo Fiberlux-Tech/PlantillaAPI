@@ -72,14 +72,14 @@ class Config:
     RECURRING_SERVICES_START_ROW = 36
     # NOTE: 'ingreso' and 'egreso' are removed as they are calculated internally
     RECURRING_SERVICES_COLUMNS = {
-        'tipo_servicio': 'L',
-        'nota': 'M',
-        'ubicacion': 'N',
-        'Q': 'O',
-        'P': 'P',
-        'CU1': 'R',
-        'CU2': 'S',
-        'proveedor': 'T',
+        'tipo_servicio': 'M',
+        'nota': 'N',
+        'ubicacion': 'O',
+        'Q': 'P',
+        'P': 'Q',
+        'CU1': 'S',
+        'CU2': 'T',
+        'proveedor': 'U',
     }
 
     # --- Fixed Costs Table Settings ---
@@ -93,4 +93,6 @@ class Config:
         'ubicacion': 'F',
         'cantidad': 'G',
         'costoUnitario': 'H',
+        'periodo_inicio': 'J',
+        'duracion_meses': 'K'
     }

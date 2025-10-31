@@ -125,6 +125,8 @@ class FixedCost(db.Model):
     ubicacion = db.Column(db.String(128))
     cantidad = db.Column(db.Float)
     costoUnitario = db.Column(db.Float)
+    periodo_inicio = db.Column(db.Integer, nullable=False, server_default='0')
+    duracion_meses = db.Column(db.Integer, nullable=False, server_default='1')
     @hybrid_property
     def total(self):
         """Calculates the total cost dynamically."""
@@ -143,7 +145,9 @@ class FixedCost(db.Model):
             'ubicacion': self.ubicacion,
             'cantidad': self.cantidad,
             'costoUnitario': self.costoUnitario,
-            'total': self.total
+            'total': self.total,
+            'periodo_inicio': self.periodo_inicio,
+            'duracion_meses': self.duracion_meses
         }
 
 # --- 4. RECURRING SERVICE MODEL (EXISTING) ---

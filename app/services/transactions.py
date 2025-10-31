@@ -14,6 +14,21 @@ from .variables import get_latest_master_variables # <-- IMPORTANT: Import from 
 from .email_service import send_new_transaction_email, send_status_update_email # <-- NEW: IMPORT EMAIL SERVICE
 
 # --- HELPER FUNCTIONS ---
+def _initialize_timeline(num_periods):
+    """Creates a dictionary to hold the detailed timeline components."""
+    return {
+        'periods': [f"t={i}" for i in range(num_periods)],
+        'revenues': {
+            'nrc': [0.0] * num_periods,
+            'mrc': [0.0] * num_periods,
+        },
+        'expenses': {
+            'comisiones': [0.0] * num_periods,
+            'egreso': [0.0] * num_periods, # This is for recurring 'variable' costs
+            'fixed_costs': [], # This will be a list of objects
+        },
+        'net_cash_flow': [0.0] * num_periods,
+    }
 
 def _generate_unique_id(customer_name, business_unit):
     """
@@ -56,95 +71,144 @@ def _calculate_financial_metrics(data):
     """
     Private helper function to calculate financial metrics based on extracted data.
     ---
-    REFACTORED: This function is now the single source of truth.
-    It calculates commissions *and* all other financial metrics based on a 'data' dict.
+    REFACTORED: This function now builds a detailed, itemized timeline
+    and calculates KPIs based on that timeline.
     ---
     """
     
-    # --- 1. CALCULATE COMMISSION FIRST ---
-    # We pass the data dict to the stateless commission calculator.
-    # This ensures commission is *always* calculated before other metrics.
-    # NOTE: The data dict is modified in-place, adding 'comisiones' and 'grossMarginRatio'
-    # which are needed for the commission logic itself.
-    
-    # First, calculate intermediate financial values needed for commission
-    # (This logic is moved up from below)
+    # --- 1. INITIAL SETUP & COMMISSION CALCULATION ---
     
     plazoContrato = int(data.get('plazoContrato', 0))
+    num_periods = plazoContrato + 1
     MRC = data.get('MRC', 0)
     NRC = data.get('NRC', 0)
     
     totalRevenue = NRC + (MRC * plazoContrato)
     
     # Calculate egreso/expense *before* commission
-    costoInstalacion = data.get('costoInstalacion', 0)
+    costoInstalacion = data.get('costoInstalacion', 0) # This is the old total, used for commission logic
     tipoCambio = data.get('tipoCambio', 1)
     
     total_monthly_expense = sum(item.get('egreso', 0) for item in data.get('recurring_services', []))
-    
-    # Calculate upfront costs *without* commission
-    upfront_costs_pre_commission = (costoInstalacion * tipoCambio)
     total_monthly_expense_converted = total_monthly_expense * tipoCambio
     
-    # Calculate total expense *without* commission
+    upfront_costs_pre_commission = (costoInstalacion * tipoCambio)
     totalExpense_pre_commission = upfront_costs_pre_commission + (total_monthly_expense_converted * plazoContrato)
     
     grossMargin_pre_commission = totalRevenue - totalExpense_pre_commission
     grossMarginRatio = (grossMargin_pre_commission / totalRevenue) if totalRevenue else 0
     
     # --- Pass all required values to the commission calculators ---
-    # We add these intermediate values to the dict so the commission functions can use them.
     data['totalRevenue'] = totalRevenue
     data['grossMargin'] = grossMargin_pre_commission
     data['grossMarginRatio'] = grossMarginRatio
     
-    # --- THIS IS THE NEW COMMISSION CALCULATION STEP ---
-    calculated_commission = _calculate_final_commission(data) # <-- REFACTORED
+    # --- THIS IS THE COMMISSION CALCULATION STEP ---
+    # This remains unchanged, as commission rules are based on totals.
+    comisiones = _calculate_final_commission(data)
     
-    # --- 2. CALCULATE FINAL METRICS USING THE NEW COMMISSION ---
     
-    # Now, comisiones is the *calculated* value, not a 0.0 default
-    comisiones = calculated_commission # <-- NEW
+    # --- 2. BUILD THE DETAILED TIMELINE ---
+    
+    timeline = _initialize_timeline(num_periods)
     costoCapitalAnual = data.get('costoCapitalAnual', 0)
 
-    # Recalculate expenses *with* commission
-    upfront_costs = (costoInstalacion * tipoCambio) + comisiones # <-- Uses new commission
-    totalExpense = upfront_costs + (total_monthly_expense_converted * plazoContrato) # <-- Uses new commission
-    grossMargin = totalRevenue - totalExpense # <-- Uses new commission
+    # A. Populate Revenues
+    timeline['revenues']['nrc'][0] = NRC
+    for i in range(1, num_periods):
+        timeline['revenues']['mrc'][i] = MRC
 
-    initial_cash_flow = NRC - upfront_costs
-    cash_flows = [initial_cash_flow]
-    monthly_net_cash_flow = MRC - total_monthly_expense_converted
-    cash_flows.extend([monthly_net_cash_flow] * plazoContrato)
+    # B. Populate Expenses (as negative numbers)
+    timeline['expenses']['comisiones'][0] = -comisiones
+    for i in range(1, num_periods):
+        timeline['expenses']['egreso'][i] = -total_monthly_expense_converted
+
+    # C. Populate Fixed Costs (The new logic)
+    total_fixed_costs_applied = 0.0
+    for cost_item in data.get('fixed_costs', []):
+        cost_total = (cost_item.get('total', 0) or 0.0) * tipoCambio
+        periodo_inicio = int(cost_item.get('periodo_inicio', 0) or 0)
+        duracion_meses = int(cost_item.get('duracion_meses', 1) or 1)
+
+        # Create the timeline list for this specific cost
+        cost_timeline_values = [0.0] * num_periods
+        distributed_cost = cost_total / duracion_meses
+
+        for i in range(duracion_meses):
+            current_period = periodo_inicio + i
+            if current_period < num_periods:
+                cost_timeline_values[current_period] = -distributed_cost
+                total_fixed_costs_applied += distributed_cost
+
+        # Add this cost's data to the main timeline object
+        timeline['expenses']['fixed_costs'].append({
+            "id": cost_item.get('id'),
+            "categoria": cost_item.get('categoria'),
+            "tipo_servicio": cost_item.get('tipo_servicio'),
+            "total": cost_total,
+            "periodo_inicio": periodo_inicio,
+            "duracion_meses": duracion_meses,
+            "timeline_values": cost_timeline_values
+        })
+
+    # --- 3. CALCULATE NET CASH FLOW & FINAL KPIS ---
+    
+    net_cash_flow_list = []
+    for t in range(num_periods):
+        # Sum all revenues for period t
+        net_t = (
+            timeline['revenues']['nrc'][t] +
+            timeline['revenues']['mrc'][t]
+        )
+        
+        # Sum all expenses for period t
+        net_t += (
+            timeline['expenses']['comisiones'][t] +
+            timeline['expenses']['egreso'][t]
+        )
+        
+        # Sum all distributed fixed costs for period t
+        for fc in timeline['expenses']['fixed_costs']:
+            net_t += fc['timeline_values'][t]
+            
+        timeline['net_cash_flow'][t] = net_t
+        net_cash_flow_list.append(net_t)
+
+    # Calculate final KPIs using the new net_cash_flow_list
+    totalExpense = comisiones + total_fixed_costs_applied + (total_monthly_expense_converted * plazoContrato)
+    grossMargin = totalRevenue - totalExpense
 
     try:
         monthly_discount_rate = costoCapitalAnual / 12
-        van = npf.npv(monthly_discount_rate, cash_flows)
+        van = npf.npv(monthly_discount_rate, net_cash_flow_list)
     except Exception:
         van = None
 
     try:
-        tir = npf.irr(cash_flows)
+        tir = npf.irr(net_cash_flow_list)
     except Exception:
         tir = None
 
     cumulative_cash_flow = 0
     payback = None
-    for i, flow in enumerate(cash_flows):
+    for i, flow in enumerate(net_cash_flow_list):
         cumulative_cash_flow += flow
         if cumulative_cash_flow >= 0:
             payback = i
             break
 
-    # Return all metrics, including the newly calculated commission
+    # Return all metrics, plus the new timeline object
     return {
         'VAN': van, 'TIR': tir, 'payback': payback, 'totalRevenue': totalRevenue,
         'totalExpense': totalExpense, 
-        'comisiones': comisiones, # <-- NEW: Return the calculated commission
+        'comisiones': comisiones,
         'comisionesRate': (comisiones / totalRevenue) if totalRevenue else 0,
-        'costoInstalacionRatio': (costoInstalacion * tipoCambio / totalRevenue) if totalRevenue else 0,
+        'costoInstalacionRatio': (total_fixed_costs_applied / totalRevenue) if totalRevenue else 0, # Note: This now respects distribution
         'grossMargin': grossMargin, 
         'grossMarginRatio': (grossMargin / totalRevenue) if totalRevenue else 0,
+        
+        # --- THE NEW OBJECT FOR THE FRONTEND ---
+        'timeline': timeline 
     }
 
 
@@ -612,6 +676,11 @@ def process_excel_file(excel_file):
             if pd.notna(item.get('cantidad')) and pd.notna(item.get('costoUnitario')):
                 # <-- BUG FIX: Was item['cantidad'] * item['cantidad']
                 item['total'] = item['cantidad'] * item['costoUnitario'] 
+            
+            # --- ADD THIS BLOCK TO CLEAN NEW FIELDS ---
+            item['periodo_inicio'] = safe_float(item.get('periodo_inicio', 0))
+            item['duracion_meses'] = safe_float(item.get('duracion_meses', 1))
+            # -----------------------------------------
 
         for item in recurring_services_data:
             q = safe_float(item.get('Q', 0))
@@ -711,7 +780,12 @@ def save_transaction(data):
                 transaction=new_transaction, categoria=cost_item.get('categoria'),
                 tipo_servicio=cost_item.get('tipo_servicio'), ticket=cost_item.get('ticket'),
                 ubicacion=cost_item.get('ubicacion'), cantidad=cost_item.get('cantidad'),
-                costoUnitario=cost_item.get('costoUnitario')
+                costoUnitario=cost_item.get('costoUnitario'),
+                
+                # --- ADD THESE TWO LINES ---
+                periodo_inicio=cost_item.get('periodo_inicio', 0),
+                duracion_meses=cost_item.get('duracion_meses', 1)
+                # -------------------------
             )
             db.session.add(new_cost)
 
