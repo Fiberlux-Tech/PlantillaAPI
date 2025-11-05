@@ -103,22 +103,26 @@ def _calculate_financial_metrics(data):
     
     # Normalize NRC to PEN
     NRC_PEN = _normalize_to_pen(data.get('NRC'), nrc_currency, tipoCambio)
+    
+    # <-- NEW: Get and normalize the user-provided MRC (header field)
+    # This is the OVERRIDE value
+    user_provided_mrc_pen = _normalize_to_pen(data.get('MRC'), mrc_currency, tipoCambio)
 
     plazoContrato = int(data.get('plazoContrato', 0))
     num_periods = plazoContrato + 1
     
-    # <-- LOGIC FIX: Calculate MRC_PEN and total_monthly_expense_pen from the bottom up ---
-    calculated_mrc_pen = 0.0
+    # <-- Calculate MRC SUM from recurring services table (The DEFAULT) ---
+    mrc_sum_from_services_pen = 0.0 # <-- New variable for the sum
     total_monthly_expense_pen = 0.0
     
     for item in data.get('recurring_services', []):
         q = item.get('Q') or 0
         
-        # Calculate revenue side (MRC)
+        # Calculate revenue side (MRC SUM)
         # 'P' (price) always uses the transaction's 'mrc_currency'
         p_pen = _normalize_to_pen(item.get('P'), mrc_currency, tipoCambio)
         item['ingreso_pen'] = p_pen * q
-        calculated_mrc_pen += item['ingreso_pen']
+        mrc_sum_from_services_pen += item['ingreso_pen'] # <-- Accumulate sum
         
         # Calculate expense side (Egreso)
         cu1_pen = _normalize_to_pen(item.get('CU1'), item.get('cu_currency'), tipoCambio)
@@ -126,9 +130,15 @@ def _calculate_financial_metrics(data):
         item['egreso_pen'] = (cu1_pen + cu2_pen) * q # Store PEN value for later
         total_monthly_expense_pen += item['egreso_pen']
     # ------------------------------------------------------------------------------------
-    
+    # <-- NEW OVERRIDE LOGIC: Determine the final MRC used for calculations
+    # If user-provided MRC (normalized) is > 0, use it (override). Otherwise, use the calculated sum (default).
+    if user_provided_mrc_pen is not None and user_provided_mrc_pen > 0:
+        final_mrc_pen = user_provided_mrc_pen
+    else:
+        final_mrc_pen = mrc_sum_from_services_pen 
+
     # Calculate totalRevenue in PEN
-    totalRevenue = NRC_PEN + (calculated_mrc_pen * plazoContrato)
+    totalRevenue = NRC_PEN + (final_mrc_pen * plazoContrato)
     
     # <-- MODIFIED: Normalize fixed costs to PEN ---
     # We also re-calculate 'costoInstalacion' (total upfront fixed costs) in PEN
@@ -150,7 +160,7 @@ def _calculate_financial_metrics(data):
     data['totalRevenue'] = totalRevenue
     data['grossMargin'] = grossMargin_pre_commission
     data['grossMarginRatio'] = grossMarginRatio
-    data['MRC'] = calculated_mrc_pen # <-- FIX: Pass the calculated PEN version of MRC
+    data['MRC'] = final_mrc_pen # <-- FIX: Pass the calculated PEN version of MRC
     
     # --- THIS IS THE COMMISSION CALCULATION STEP ---
     # <-- MODIFIED: This now calls the imported function
@@ -165,7 +175,7 @@ def _calculate_financial_metrics(data):
     # A. Populate Revenues (PEN)
     timeline['revenues']['nrc'][0] = NRC_PEN
     for i in range(1, num_periods):
-        timeline['revenues']['mrc'][i] = calculated_mrc_pen # <-- FIX: Use calculated value
+        timeline['revenues']['mrc'][i] = final_mrc_pen # <-- FIX: Use calculated value
 
     # B. Populate Expenses (PEN, as negative numbers)
     timeline['expenses']['comisiones'][0] = -comisiones
@@ -251,7 +261,7 @@ def _calculate_financial_metrics(data):
     # Return all metrics, plus the new timeline object
     return {
         # <-- FIX: We now also return the calculated MRC_PEN
-        'MRC_PEN_calc': calculated_mrc_pen,
+        'MRC_PEN_calc': final_mrc_pen,
         'VAN': van, 'TIR': tir, 'payback': payback, 'totalRevenue': totalRevenue,
         'totalExpense': totalExpense, 
         'comisiones': comisiones,
@@ -266,9 +276,6 @@ def _calculate_financial_metrics(data):
         'timeline': timeline 
     }
 
-
-# --- COMMISSION CALCULATION HELPERS (REMOVED) ---
-# All commission logic has been moved to app/services/commission_rules.py
 
 
 # --- MAIN SERVICE FUNCTIONS ---
