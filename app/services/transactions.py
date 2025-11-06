@@ -140,9 +140,10 @@ def _calculate_financial_metrics(data):
     costo_carta_fianza_orig = 0.0
     costo_carta_fianza_pen = 0.0 # Default to 0
     aplicaCartaFianza = data.get('aplicaCartaFianza', False)
-    
+
+    tasaCartaFianza = data.get('tasaCartaFianza', 0.0) or 0.0
+        
     if aplicaCartaFianza:
-        tasaCartaFianza = data.get('tasaCartaFianza', 0.0) or 0.0
         # Formula = 10% * plazo * MRC_ORIG * 1.18 * tasa
         costo_carta_fianza_orig = (0.10 * plazoContrato * final_mrc_orig * 1.18 * tasaCartaFianza)
         
