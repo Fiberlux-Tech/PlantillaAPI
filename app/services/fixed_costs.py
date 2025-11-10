@@ -98,3 +98,108 @@ def lookup_investment_codes(investment_codes):
     finally:
         if conn:
             conn.close()
+
+def lookup_recurring_services(service_codes):
+    """
+    Connects to the external Data Warehouse and retrieves RecurringService data 
+    from the dim_cotizacion_bi table based on a list of service codes (Cotizacion).
+    """
+    if not service_codes:
+        return {"success": True, "data": {"recurring_services": []}}
+
+    # The external DB URI is stored in app.config
+    db_uri = current_app.config['DATAWAREHOUSE_URI']
+
+    # We must parse the connection string to get psycopg2 arguments
+    import urllib.parse
+    url = urllib.parse.urlparse(db_uri)
+
+    conn = None
+    try:
+        # 1. Connect to the external database
+        conn = psycopg2.connect(
+            dbname=url.path[1:], 
+            user=url.username, 
+            password=url.password, 
+            host=url.hostname, 
+            port=url.port
+        )
+        cursor = conn.cursor()
+
+        # 2. Construct the dynamic SQL query
+        # CRITICAL FIX: Targeting the "Cotizacion" column for filtering
+        placeholders = ', '.join(['%s'] * len(service_codes))
+        
+        sql_query = f"""
+            SELECT 
+                "Linea", 
+                "destino_direccion", 
+                "cantidad", 
+                "precio_unitario_new", 
+                "moneda", 
+                "id_servicio",
+                "Cotizacion"
+            FROM dim_cotizacion_bi 
+            WHERE "Cotizacion" IN ({placeholders});
+        """
+
+        cursor.execute(sql_query, service_codes)
+        records = cursor.fetchall()
+        
+        # 3. Map the raw records to the required RecurringService structure
+        mapped_services = []
+        
+        for record in records:
+            # DB columns: Linea, destino_direccion, cantidad, precio_unitario_new, moneda, id_servicio, Cotizacion
+            linea, destino, cantidad_raw, precio_raw, moneda_raw, id_servicio, cotizacion_code = record
+            
+            # Ensure numeric types are valid floats, defaulting to 0.0
+            clean_q = float(cantidad_raw) if cantidad_raw is not None else 0.0
+            clean_p = float(precio_raw) if precio_raw is not None else 0.0
+            
+            # Clean currency (defaults to PEN if missing)
+            moneda_clean = (moneda_raw or "PEN").upper().strip()
+            if moneda_clean not in ["PEN", "USD"]:
+                moneda_clean = "PEN"
+
+            # Placeholder values for cost fields as requested
+            cu1 = 0.0
+            cu2 = 0.0
+            cu_currency = 'USD'
+            
+            service = {
+                "id": cotizacion_code, # <--- FIXED: Using the Cotizacion code as the unique ID
+                "tipo_servicio": linea,
+                "ubicacion": destino,
+                "Q": clean_q,
+                "P": clean_p,
+                
+                # Mapped fields
+                "p_currency": moneda_clean, 
+                "ingreso": clean_q * clean_p,
+                
+                # Placeholder/Calculated fields
+                "CU1": cu1,
+                "CU2": cu2,
+                "proveedor": f"ID_SERV:{id_servicio}",
+                "cu_currency": cu_currency,
+                "egreso": (cu1 + cu2) * clean_q,
+                
+                # Original IDs retained for context
+                "id_servicio_lookup": id_servicio,
+                "cotizacion_code_lookup": cotizacion_code,
+            }
+            
+            mapped_services.append(service)
+
+        return {"success": True, "data": {"recurring_services": mapped_services}}
+
+    except psycopg2.Error as e:
+        current_app.logger.error("Data Warehouse connection/query error: %s", str(e), exc_info=True)
+        return {"success": False, "error": f"Database query failed. Error: {str(e)}"}, 500
+    except Exception as e:
+        current_app.logger.error("Unexpected error during Recurring Service lookup: %s", str(e), exc_info=True)
+        return {"success": False, "error": f"An unexpected error occurred during lookup: {str(e)}"}, 500
+    finally:
+        if conn:
+            conn.close()

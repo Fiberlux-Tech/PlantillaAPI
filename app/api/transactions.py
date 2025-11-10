@@ -20,7 +20,7 @@ from app.services.transactions import (
     calculate_preview_metrics
 )
 # ----------------------
-from app.services.fixed_costs import lookup_investment_codes
+from app.services.fixed_costs import lookup_investment_codes, lookup_recurring_services
 
 bp = Blueprint('transactions', __name__)
 
@@ -129,5 +129,24 @@ def lookup_fixed_costs_route():
         return jsonify({"success": False, "error": "Missing or invalid 'investment_codes' list of strings."}), 400
         
     result = lookup_investment_codes(codes) 
+    # _handle_service_result handles the tuple (error_dict, status_code) on failure
+    return _handle_service_result(result)
+
+# --- NEW ROUTE FOR RECURRING SERVICE LOOKUP (dim_cotizacion_bi) ---
+@bp.route('/recurring-services/lookup', methods=['POST'])
+@login_required 
+def lookup_recurring_services_route():
+    """
+    Accepts a list of service codes ('quotation codes') and returns structured 
+    RecurringService objects from the external master database (dim_cotizacion_bi).
+    """
+    data = request.get_json()
+    # CRITICAL: Check the key is 'service_codes' as per the frontend brief
+    codes = data.get('service_codes') 
+
+    if not codes or not isinstance(codes, list) or not all(isinstance(c, str) for c in codes):
+        return jsonify({"success": False, "error": "Missing or invalid 'service_codes' list of strings."}), 400
+        
+    result = lookup_recurring_services(codes) 
     # _handle_service_result handles the tuple (error_dict, status_code) on failure
     return _handle_service_result(result)
