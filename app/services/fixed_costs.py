@@ -110,7 +110,7 @@ def lookup_recurring_services(service_codes):
     # The external DB URI is stored in app.config
     db_uri = current_app.config['DATAWAREHOUSE_URI']
 
-    # We must parse the connection string to get psycopg2 arguments
+    # We must parse the connection string to ge t psycopg2 arguments
     import urllib.parse
     url = urllib.parse.urlparse(db_uri)
 
@@ -132,7 +132,7 @@ def lookup_recurring_services(service_codes):
         
         sql_query = f"""
             SELECT 
-                "linea", 
+                "servicio", 
                 "destino_direccion", 
                 "cantidad", 
                 "precio_unitario_new", 
@@ -151,7 +151,7 @@ def lookup_recurring_services(service_codes):
         
         for record in records:
             # DB columns: Linea, destino_direccion, cantidad, precio_unitario_new, moneda, id_servicio, Cotizacion
-            linea, destino, cantidad_raw, precio_raw, moneda_raw, id_servicio, cotizacion_code = record
+            servicio, destino, cantidad_raw, precio_raw, moneda_raw, id_servicio, cotizacion_code = record
             
             # Ensure numeric types are valid floats, defaulting to 0.0
             clean_q = float(cantidad_raw) if cantidad_raw is not None else 0.0
@@ -169,7 +169,7 @@ def lookup_recurring_services(service_codes):
             
             service = {
                 "id": cotizacion_code, # <--- FIXED: Using the Cotizacion code as the unique ID
-                "tipo_servicio": linea,
+                "tipo_servicio": servicio,
                 "ubicacion": destino,
                 "Q": clean_q,
                 "P": clean_p,
@@ -181,7 +181,7 @@ def lookup_recurring_services(service_codes):
                 # Placeholder/Calculated fields
                 "CU1": cu1,
                 "CU2": cu2,
-                "proveedor": f"ID_SERV:{id_servicio}",
+                "proveedor": None,
                 "cu_currency": cu_currency,
                 "egreso": (cu1 + cu2) * clean_q,
                 
