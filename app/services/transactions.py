@@ -693,8 +693,8 @@ def approve_transaction(transaction_id):
         current_app.logger.error("Error during transaction approval for ID %s: %s", transaction_id, str(e), exc_info=True)
         return {"success": False, "error": f"Database error: {str(e)}"}, 500
 
-@login_required 
-def reject_transaction(transaction_id):
+@login_required
+def reject_transaction(transaction_id, rejection_note=None):
     """
     Rejects a transaction by updating its status and approval date.
     Immutability Check: Only allows rejection if status is 'PENDING'.
@@ -712,6 +712,11 @@ def reject_transaction(transaction_id):
 
         transaction.ApprovalStatus = 'REJECTED'
         transaction.approvalDate = datetime.utcnow()
+
+        # Store rejection note if provided
+        if rejection_note:
+            transaction.rejection_note = rejection_note.strip()
+
         db.session.commit()
 
         # --- NEW: SEND REJECTION EMAIL ---

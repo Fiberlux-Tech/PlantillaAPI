@@ -109,5 +109,9 @@ def send_status_update_email(transaction, new_status):
     status_text = "confirmado" if new_status == "APPROVED" else "rechazado"
     subject = f"Actualización de Solicitud: {transaction.clientName}"
     body = f"Se ha {status_text} la solicitud para el cliente {transaction.clientName} (ID: {transaction.id})."
-    
+
+    # Add rejection note to email body if present
+    if new_status == "REJECTED" and transaction.rejection_note:
+        body += f"\n\nMotivo del rechazo:\n{transaction.rejection_note}"
+
     send_email_async(recipient_email, subject, body)

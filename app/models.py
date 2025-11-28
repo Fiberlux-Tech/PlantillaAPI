@@ -80,6 +80,7 @@ class Transaction(db.Model):
     ApprovalStatus = db.Column(db.String(64), default='PENDING')
     submissionDate = db.Column(db.DateTime, default=datetime.utcnow)
     approvalDate = db.Column(db.DateTime, nullable=True)
+    rejection_note = db.Column(db.String(500), nullable=True)
 
 
     # --- Relationships to the other tables ---
@@ -125,6 +126,7 @@ class Transaction(db.Model):
             'ApprovalStatus': self.ApprovalStatus,
             'submissionDate': self.submissionDate.isoformat() if self.submissionDate else None,
             'approvalDate': self.approvalDate.isoformat() if self.approvalDate else None,
+            'rejection_note': self.rejection_note,
         }
 
 # --- 3. FIXED COST MODEL (EXISTING) ---

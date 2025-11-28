@@ -102,9 +102,21 @@ def approve_transaction_route(transaction_id):
 
 @bp.route('/transaction/reject/<string:transaction_id>', methods=['POST'])
 @login_required
-@finance_admin_required 
+@finance_admin_required
 def reject_transaction_route(transaction_id):
-    result = reject_transaction(transaction_id)
+    # Extract optional rejection note from request body
+    data = request.get_json() or {}
+    rejection_note = data.get('rejection_note')
+
+    # Validate note length if provided
+    if rejection_note and len(rejection_note) > 500:
+        return jsonify({
+            "success": False,
+            "error": "Rejection note cannot exceed 500 characters."
+        }), 400
+
+    # Pass note to service layer
+    result = reject_transaction(transaction_id, rejection_note=rejection_note)
     # Service returns a tuple (dict, 400, 404, or 500) on failure
     return _handle_service_result(result)
 
