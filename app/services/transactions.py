@@ -92,16 +92,14 @@ def _calculate_financial_metrics(data):
     """
     
     # --- 1. INITIAL SETUP & CURRENCY ---
-    tipoCambio = data.get('tipoCambio', 1) 
-    # This is the currency for the 'P' values and the 'MRC' override
-    mrc_currency = data.get('mrc_currency', 'PEN')
-    nrc_currency = data.get('nrc_currency', 'PEN')
-    
+    tipoCambio = data.get('tipoCambio', 1)
+    MRC_currency = data.get('MRC_currency', 'PEN')
+    NRC_currency = data.get('NRC_currency', 'PEN')
+
     # --- 2. DETERMINE FINAL MRC (IN ORIGINAL CURRENCY) ---
-    
+
     # Get the user-provided override value (in original currency)
-    # We assume data.get('MRC') is in the 'mrc_currency'
-    user_provided_mrc_orig = data.get('MRC', 0.0) or 0.0 
+    user_provided_MRC_original = data.get('MRC_original', 0.0) or 0.0 
     
     # Calculate MRC sum from services (in original currency)
     mrc_sum_from_services_orig = 0.0
@@ -109,29 +107,37 @@ def _calculate_financial_metrics(data):
     
     for item in data.get('recurring_services', []):
         q = item.get('Q') or 0
-        
-        # --- Revenue side (ORIGINAL CURRENCY) ---
-        p_orig = item.get('P') or 0.0
-        # Store original currency income
-        item['ingreso_orig'] = p_orig * q
-        mrc_sum_from_services_orig += item['ingreso_orig']
-        
+
+        # --- Revenue side (convert P to PEN) ---
+        P_original = item.get('P_original') or 0.0
+        P_currency = item.get('P_currency', 'PEN')
+        P_pen = _normalize_to_pen(P_original, P_currency, tipoCambio)
+        item['P_pen'] = P_pen
+        item['ingreso_pen'] = P_pen * q
+        mrc_sum_from_services_orig += P_original * q  # Sum in original currency
+
         # --- Expense side (NORMALIZED TO PEN) ---
-        cu1_pen = _normalize_to_pen(item.get('CU1'), item.get('cu_currency'), tipoCambio)
-        cu2_pen = _normalize_to_pen(item.get('CU2'), item.get('cu_currency'), tipoCambio)
-        item['egreso_pen'] = (cu1_pen + cu2_pen) * q
+        CU1_original = item.get('CU1_original') or 0.0
+        CU2_original = item.get('CU2_original') or 0.0
+        CU_currency = item.get('CU_currency', 'USD')
+        CU1_pen = _normalize_to_pen(CU1_original, CU_currency, tipoCambio)
+        CU2_pen = _normalize_to_pen(CU2_original, CU_currency, tipoCambio)
+        item['CU1_pen'] = CU1_pen
+        item['CU2_pen'] = CU2_pen
+        item['egreso_pen'] = (CU1_pen + CU2_pen) * q
         total_monthly_expense_pen += item['egreso_pen']
             
-    # --- NEW OVERRIDE LOGIC (ORIGINAL CURRENCY) ---
-    final_mrc_orig = 0.0
-    if user_provided_mrc_orig > 0:
-        final_mrc_orig = user_provided_mrc_orig
+    # --- OVERRIDE LOGIC (ORIGINAL CURRENCY) ---
+    final_MRC_original = 0.0
+    if user_provided_MRC_original > 0:
+        final_MRC_original = user_provided_MRC_original
     else:
-        final_mrc_orig = mrc_sum_from_services_orig
+        final_MRC_original = mrc_sum_from_services_orig
 
     # --- 3. NORMALIZE VALUES TO PEN ---
-    NRC_PEN = _normalize_to_pen(data.get('NRC'), nrc_currency, tipoCambio)
-    final_mrc_pen = _normalize_to_pen(final_mrc_orig, mrc_currency, tipoCambio)
+    NRC_original = data.get('NRC_original', 0.0) or 0.0
+    NRC_pen = _normalize_to_pen(NRC_original, NRC_currency, tipoCambio)
+    final_MRC_pen = _normalize_to_pen(final_MRC_original, MRC_currency, tipoCambio)
     
     plazoContrato = int(data.get('plazoContrato', 0))
     num_periods = plazoContrato + 1
@@ -145,20 +151,23 @@ def _calculate_financial_metrics(data):
         
     if aplicaCartaFianza:
         # Formula = 10% * plazo * MRC_ORIG * 1.18 * tasa
-        costo_carta_fianza_orig = (0.10 * plazoContrato * final_mrc_orig * 1.18 * tasaCartaFianza)
-        
+        costo_carta_fianza_orig = (0.10 * plazoContrato * final_MRC_original * 1.18 * tasaCartaFianza)
+
         # NOW NORMALIZE IT
         # The cost is in the same currency as the MRC
-        costo_carta_fianza_pen = _normalize_to_pen(costo_carta_fianza_orig, mrc_currency, tipoCambio)
+        costo_carta_fianza_pen = _normalize_to_pen(costo_carta_fianza_orig, MRC_currency, tipoCambio)
 
     # --- 5. CONTINUE WITH ALL-PEN CALCULATIONS ---
-    totalRevenue = NRC_PEN + (final_mrc_pen * plazoContrato)
-    
-    # <-- MODIFIED: Normalize fixed costs to PEN ---
+    totalRevenue = NRC_pen + (final_MRC_pen * plazoContrato)
+
+    # Normalize fixed costs to PEN
     costoInstalacion_pen = 0.0
     for item in data.get('fixed_costs', []):
         cantidad = item.get('cantidad') or 0
-        costoUnitario_pen = _normalize_to_pen(item.get('costoUnitario'), item.get('costo_currency'), tipoCambio)
+        costoUnitario_original = item.get('costoUnitario_original') or 0.0
+        costoUnitario_currency = item.get('costoUnitario_currency', 'USD')
+        costoUnitario_pen = _normalize_to_pen(costoUnitario_original, costoUnitario_currency, tipoCambio)
+        item['costoUnitario_pen'] = costoUnitario_pen
         item['total_pen'] = cantidad * costoUnitario_pen
         costoInstalacion_pen += item['total_pen'] 
 
@@ -173,7 +182,7 @@ def _calculate_financial_metrics(data):
     data['totalRevenue'] = totalRevenue
     data['grossMargin'] = grossMargin_pre_commission
     data['grossMarginRatio'] = grossMarginRatio
-    data['MRC'] = final_mrc_pen # <-- FIX: Pass the calculated PEN version
+    data['MRC_pen'] = final_MRC_pen  # Pass the calculated PEN version for commission
     
     # --- THIS IS THE COMMISSION CALCULATION STEP ---
     comisiones = _calculate_final_commission(data)
@@ -185,9 +194,9 @@ def _calculate_financial_metrics(data):
     costoCapitalAnual = data.get('costoCapitalAnual', 0)
 
     # A. Populate Revenues (PEN)
-    timeline['revenues']['nrc'][0] = NRC_PEN
+    timeline['revenues']['nrc'][0] = NRC_pen
     for i in range(1, num_periods):
-        timeline['revenues']['mrc'][i] = final_mrc_pen
+        timeline['revenues']['mrc'][i] = final_MRC_pen
 
     # B. Populate Expenses (PEN, as negative numbers)
     # This line is now correct, using the PEN-normalized cost
@@ -271,8 +280,10 @@ def _calculate_financial_metrics(data):
 
     # Return all metrics, plus the new timeline object
     return {
-        'MRC_PEN_calc': final_mrc_pen, # This is the calculated PEN MRC
-        'MRC_orig_calc': final_mrc_orig, # This is the calculated Original MRC
+        'MRC_original': final_MRC_original,  # Calculated MRC in original currency
+        'MRC_pen': final_MRC_pen,  # Calculated MRC in PEN
+        'NRC_original': NRC_original,  # NRC in original currency
+        'NRC_pen': NRC_pen,  # NRC in PEN
         'VAN': van, 'TIR': tir, 'payback': payback, 'totalRevenue': totalRevenue,
         'totalExpense': totalExpense, 
         'comisiones': comisiones,
@@ -412,11 +423,12 @@ def recalculate_commission_and_metrics(transaction_id):
                 setattr(transaction, key, value)
         
         transaction.costoInstalacion = clean_financial_metrics.get('costoInstalacion')
-        
-        # --- MODIFY THIS LINE ---
-        # Update the MRC field with the final *original* currency value
-        transaction.MRC = clean_financial_metrics.get('MRC_orig_calc')
-        # ------------------------
+
+        # Update the MRC and NRC fields with calculated values
+        transaction.MRC_original = clean_financial_metrics.get('MRC_original')
+        transaction.MRC_pen = clean_financial_metrics.get('MRC_pen')
+        transaction.NRC_original = clean_financial_metrics.get('NRC_original')
+        transaction.NRC_pen = clean_financial_metrics.get('NRC_pen')
 
         # 5. Commit changes
         db.session.commit()
@@ -571,11 +583,13 @@ def save_transaction(data):
             companyID=tx_data.get('companyID'), salesman=tx_data['salesman'], # Use the overwritten salesman
             orderID=tx_data.get('orderID'), tipoCambio=tx_data.get('tipoCambio'),
             
-            # <-- FIX: Save the calculated MRC_PEN, not the (potentially wrong) Excel header MRC
-            MRC=tx_data.get('MRC_orig_calc'), # Saves the final *original* currency MRC
-            mrc_currency=tx_data.get('mrc_currency', 'PEN'), # <-- NEW
-            NRC=tx_data.get('NRC'),
-            nrc_currency=tx_data.get('nrc_currency', 'PEN'), # <-- NEW
+            # Save calculated MRC and NRC with all three fields
+            MRC_original=tx_data.get('MRC_original'),
+            MRC_currency=tx_data.get('MRC_currency', 'PEN'),
+            MRC_pen=tx_data.get('MRC_pen'),
+            NRC_original=tx_data.get('NRC_original'),
+            NRC_currency=tx_data.get('NRC_currency', 'PEN'),
+            NRC_pen=tx_data.get('NRC_pen'),
             
             # <-- NOTE: All these KPIs are now in PEN
             VAN=tx_data.get('VAN'),
@@ -604,13 +618,11 @@ def save_transaction(data):
                 transaction=new_transaction, categoria=cost_item.get('categoria'),
                 tipo_servicio=cost_item.get('tipo_servicio'), ticket=cost_item.get('ticket'),
                 ubicacion=cost_item.get('ubicacion'), cantidad=cost_item.get('cantidad'),
-                costoUnitario=cost_item.get('costoUnitario'),
-                costo_currency=cost_item.get('costo_currency', 'USD'), # <-- NEW
-                
-                # --- ADD THESE TWO LINES ---
+                costoUnitario_original=cost_item.get('costoUnitario_original'),
+                costoUnitario_currency=cost_item.get('costoUnitario_currency', 'USD'),
+                costoUnitario_pen=cost_item.get('costoUnitario_pen'),
                 periodo_inicio=cost_item.get('periodo_inicio', 0),
                 duracion_meses=cost_item.get('duracion_meses', 1)
-                # -------------------------
             )
             db.session.add(new_cost)
 
@@ -619,12 +631,15 @@ def save_transaction(data):
             new_service = RecurringService(
                 transaction=new_transaction, tipo_servicio=service_item.get('tipo_servicio'),
                 nota=service_item.get('nota'), ubicacion=service_item.get('ubicacion'),
-                Q=service_item.get('Q'), 
-                P=service_item.get('P'),
-                # <-- REMOVED: p_currency is no longer here
-                CU1=service_item.get('CU1'), 
-                CU2=service_item.get('CU2'),
-                cu_currency=service_item.get('cu_currency', 'USD'), # <-- NEW
+                Q=service_item.get('Q'),
+                P_original=service_item.get('P_original'),
+                P_currency=service_item.get('P_currency', 'PEN'),
+                P_pen=service_item.get('P_pen'),
+                CU1_original=service_item.get('CU1_original'),
+                CU2_original=service_item.get('CU2_original'),
+                CU_currency=service_item.get('CU_currency', 'USD'),
+                CU1_pen=service_item.get('CU1_pen'),
+                CU2_pen=service_item.get('CU2_pen'),
                 proveedor=service_item.get('proveedor')
             )
             db.session.add(new_service)

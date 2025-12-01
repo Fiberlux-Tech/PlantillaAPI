@@ -85,29 +85,35 @@ def process_excel_file(excel_file):
         fixed_costs_df.columns = config['FIXED_COSTS_COLUMNS'].keys()
         fixed_costs_data = fixed_costs_df.dropna(how='all').to_dict('records')
 
-        # Calculate totals for preview (unchanged logic)
+        # Calculate totals for preview
         for item in fixed_costs_data:
-            if pd.notna(item.get('cantidad')) and pd.notna(item.get('costoUnitario')):
-                item['total'] = item['cantidad'] * item['costoUnitario'] 
-            
-            # --- ADD THIS BLOCK TO CLEAN NEW FIELDS ---
+            # Rename to _original pattern
+            item['costoUnitario_original'] = safe_float(item.get('costoUnitario', 0))
+            item['costoUnitario_currency'] = 'USD'
+
+            # Calculate total for preview (in original currency)
+            if pd.notna(item.get('cantidad')) and pd.notna(item.get('costoUnitario_original')):
+                item['total'] = item['cantidad'] * item['costoUnitario_original']
+
             item['periodo_inicio'] = safe_float(item.get('periodo_inicio', 0))
             item['duracion_meses'] = safe_float(item.get('duracion_meses', 1))
-            # <-- NEW: Add default currency (will be saved later)
-            item['costo_currency'] = 'USD' 
-            # -----------------------------------------
 
         for item in recurring_services_data:
             q = safe_float(item.get('Q', 0))
-            p = safe_float(item.get('P', 0))
-            cu1 = safe_float(item.get('CU1', 0))
-            cu2 = safe_float(item.get('CU2', 0))
+            p_original = safe_float(item.get('P', 0))
+            cu1_original = safe_float(item.get('CU1', 0))
+            cu2_original = safe_float(item.get('CU2', 0))
 
-            item['ingreso'] = q * p
-            item['egreso'] = (cu1 + cu2) * q
-            
-            # <-- NEW: Add default currencies (will be saved later)
-            item['cu_currency'] = 'USD'
+            # Rename to _original pattern
+            item['P_original'] = p_original
+            item['P_currency'] = 'PEN'
+            item['CU1_original'] = cu1_original
+            item['CU2_original'] = cu2_original
+            item['CU_currency'] = 'USD'
+
+            # Calculate preview values in original currency
+            item['ingreso'] = q * p_original
+            item['egreso'] = (cu1_original + cu2_original) * q
 
         # <-- MODIFIED: This is the total in *original* currency, not PEN
         calculated_costoInstalacion = sum(
@@ -117,9 +123,11 @@ def process_excel_file(excel_file):
         if pd.isna(header_data.get('clientName')) or pd.isna(header_data.get('MRC')):
             return {"success": False, "error": "Required field 'Client Name' or 'MRC' is missing from the Excel file."}
 
-        # <-- NEW: Add default currencies for transaction
-        header_data['mrc_currency'] = 'PEN'
-        header_data['nrc_currency'] = 'PEN'
+        # Rename to _original pattern for transaction
+        header_data['MRC_original'] = header_data.get('MRC')
+        header_data['MRC_currency'] = 'PEN'
+        header_data['NRC_original'] = header_data.get('NRC')
+        header_data['NRC_currency'] = 'PEN'
 
         # Consolidate all extracted data
         full_extracted_data = {**header_data, 'recurring_services': recurring_services_data,

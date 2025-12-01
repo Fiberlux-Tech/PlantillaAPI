@@ -19,8 +19,8 @@ def get_pending_mrc_sum():
         tuple: (dict, status_code) on error, or dict on success
     """
     try:
-        # Base query: sum MRC for PENDING transactions
-        query = db.session.query(func.sum(Transaction.MRC)).filter(
+        # Base query: sum MRC_pen for PENDING transactions (all KPIs in PEN)
+        query = db.session.query(func.sum(Transaction.MRC_pen)).filter(
             Transaction.ApprovalStatus == 'PENDING'
         )
 

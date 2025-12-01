@@ -14,7 +14,7 @@ def _calculate_estado_commission(data):
 
     plazo = data.get('plazoContrato', 0)
     payback = data.get('payback') # Payback is calculated *before* commission
-    mrc = data.get('MRC', 0.0) # This is MRC_PEN_calc
+    mrc = data.get('MRC_pen', 0.0)  # This is MRC in PEN
     payback_ok = (payback is not None)
     rentabilidad = data.get('grossMarginRatio', 0.0) # Use pre-commission margin ratio
     # ---
@@ -103,7 +103,7 @@ def _calculate_gigalan_commission(data):
     total_revenue = data.get('totalRevenue', 1.0) # Avoid division by zero
     rentabilidad = data.get('grossMarginRatio', 0.0)
     plazo = data.get('plazoContrato', 0)
-    mrc_pen = data.get('MRC', 0.0) # This is already MRC_PEN_calc
+    mrc_pen = data.get('MRC_pen', 0.0)  # This is MRC in PEN
     # ---
     
     # Initialize variables
@@ -173,7 +173,7 @@ def _calculate_corporativo_commission(data):
     Placeholder logic for 'CORPORATIVO' (No rules defined yet).
     All financial values (MRC, etc.) are expected to be in PEN.
     """
-    mrc_pen = data.get('MRC', 0.0) # This is already MRC_PEN_calc
+    mrc_pen = data.get('MRC_pen', 0.0)  # This is MRC in PEN
     plazo = data.get('plazoContrato', 0)
     
     commission_rate = 0.06

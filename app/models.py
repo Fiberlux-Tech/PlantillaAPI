@@ -53,10 +53,12 @@ class Transaction(db.Model):
     orderID = db.Column(db.String(128), unique=False)
     tipoCambio = db.Column(db.Float)
     
-    MRC = db.Column(db.Float)
-    mrc_currency = db.Column(db.String(3), nullable=False, default='PEN') # <-- NEW FIELD
-    NRC = db.Column(db.Float)
-    nrc_currency = db.Column(db.String(3), nullable=False, default='PEN') # <-- NEW FIELD
+    MRC_original = db.Column(db.Float)
+    MRC_currency = db.Column(db.String(3), nullable=False, default='PEN')
+    MRC_pen = db.Column(db.Float, nullable=False, default=0.0)
+    NRC_original = db.Column(db.Float)
+    NRC_currency = db.Column(db.String(3), nullable=False, default='PEN')
+    NRC_pen = db.Column(db.Float, nullable=False, default=0.0)
     
     VAN = db.Column(db.Float)
     TIR = db.Column(db.Float)
@@ -99,10 +101,12 @@ class Transaction(db.Model):
             'orderID': self.orderID,
             'tipoCambio': self.tipoCambio,
             
-            'MRC': self.MRC,
-            'mrc_currency': self.mrc_currency, # <-- NEW FIELD
-            'NRC': self.NRC,
-            'nrc_currency': self.nrc_currency, # <-- NEW FIELD
+            'MRC_original': self.MRC_original,
+            'MRC_currency': self.MRC_currency,
+            'MRC_pen': self.MRC_pen,
+            'NRC_original': self.NRC_original,
+            'NRC_currency': self.NRC_currency,
+            'NRC_pen': self.NRC_pen,
             
             'VAN': self.VAN,
             'TIR': self.TIR,
@@ -141,17 +145,18 @@ class FixedCost(db.Model):
     ubicacion = db.Column(db.String(128))
     cantidad = db.Column(db.Float)
     
-    costoUnitario = db.Column(db.Float)
-    costo_currency = db.Column(db.String(3), nullable=False, default='USD') # <-- NEW FIELD
+    costoUnitario_original = db.Column(db.Float)
+    costoUnitario_currency = db.Column(db.String(3), nullable=False, default='USD')
+    costoUnitario_pen = db.Column(db.Float, nullable=False, default=0.0)
     
     periodo_inicio = db.Column(db.Integer, nullable=False, server_default='0')
     duracion_meses = db.Column(db.Integer, nullable=False, server_default='1')
     
     @hybrid_property
-    def total(self):
-        """Calculates the total cost dynamically."""
-        if self.cantidad is not None and self.costoUnitario is not None:
-            return self.cantidad * self.costoUnitario
+    def total_pen(self):
+        """Calculates the total cost in PEN dynamically."""
+        if self.cantidad is not None and self.costoUnitario_pen is not None:
+            return self.cantidad * self.costoUnitario_pen
         return None
 
     def to_dict(self):
@@ -165,10 +170,11 @@ class FixedCost(db.Model):
             'ubicacion': self.ubicacion,
             'cantidad': self.cantidad,
             
-            'costoUnitario': self.costoUnitario,
-            'costo_currency': self.costo_currency, # <-- NEW FIELD
-            
-            'total': self.total,
+            'costoUnitario_original': self.costoUnitario_original,
+            'costoUnitario_currency': self.costoUnitario_currency,
+            'costoUnitario_pen': self.costoUnitario_pen,
+
+            'total_pen': self.total_pen,
             'periodo_inicio': self.periodo_inicio,
             'duracion_meses': self.duracion_meses
         }
@@ -183,29 +189,33 @@ class RecurringService(db.Model):
     nota = db.Column(db.String(256))
     ubicacion = db.Column(db.String(128))
     Q = db.Column(db.Float)
-    
-    P = db.Column(db.Float)
-    
-    CU1 = db.Column(db.Float)
-    CU2 = db.Column(db.Float)
-    cu_currency = db.Column(db.String(3), nullable=False, default='USD') # <-- NEW FIELD
+
+    P_original = db.Column(db.Float)
+    P_currency = db.Column(db.String(3), nullable=False, default='PEN')
+    P_pen = db.Column(db.Float, nullable=False, default=0.0)
+
+    CU1_original = db.Column(db.Float)
+    CU2_original = db.Column(db.Float)
+    CU_currency = db.Column(db.String(3), nullable=False, default='USD')
+    CU1_pen = db.Column(db.Float, nullable=False, default=0.0)
+    CU2_pen = db.Column(db.Float, nullable=False, default=0.0)
     
     proveedor = db.Column(db.String(128))
     
     @hybrid_property
-    def ingreso(self):
-        """Calculates the recurring revenue dynamically."""
-        if self.Q is not None and self.P is not None:
-            return self.Q * self.P
+    def ingreso_pen(self):
+        """Calculates the recurring revenue in PEN dynamically."""
+        if self.Q is not None and self.P_pen is not None:
+            return self.Q * self.P_pen
         return None
 
     @hybrid_property
-    def egreso(self):
-        """Calculates the recurring expense dynamically."""
-        cu1 = self.CU1 or 0
-        cu2 = self.CU2 or 0
+    def egreso_pen(self):
+        """Calculates the recurring expense in PEN dynamically."""
+        cu1_pen = self.CU1_pen or 0
+        cu2_pen = self.CU2_pen or 0
         q = self.Q or 0
-        return (cu1 + cu2) * q
+        return (cu1_pen + cu2_pen) * q
 
     def to_dict(self):
         """Converts the recurring service to a dictionary."""
@@ -217,14 +227,18 @@ class RecurringService(db.Model):
             'ubicacion': self.ubicacion,
             'Q': self.Q,
             
-            'P': self.P,
-            'CU1': self.CU1,
-            'CU2': self.CU2,
-            'cu_currency': self.cu_currency, # <-- NEW FIELD
-            
+            'P_original': self.P_original,
+            'P_currency': self.P_currency,
+            'P_pen': self.P_pen,
+            'CU1_original': self.CU1_original,
+            'CU2_original': self.CU2_original,
+            'CU_currency': self.CU_currency,
+            'CU1_pen': self.CU1_pen,
+            'CU2_pen': self.CU2_pen,
+
             'proveedor': self.proveedor,
-            'ingreso': self.ingreso,
-            'egreso': self.egreso
+            'ingreso_pen': self.ingreso_pen,
+            'egreso_pen': self.egreso_pen
         }
     
 # --- 5. NEW: MASTER VARIABLE MODEL ---

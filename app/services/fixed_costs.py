@@ -69,20 +69,20 @@ def lookup_investment_codes(investment_codes):
             
             
             cost = {
-                "id": ticket, 
-                "categoria": "Inversión", # Placeholder category
-                "tipo_servicio": tipo_servicio, 
-                "ticket": ticket, 
-                "ubicacion": "N/A", # Placeholder location
+                "id": ticket,
+                "categoria": "Inversión",  # Placeholder category
+                "tipo_servicio": tipo_servicio,
+                "ticket": ticket,
+                "ubicacion": "N/A",  # Placeholder location
                 "cantidad": clean_cantidad,
-                "costoUnitario": clean_costoUnitario,
-                "costo_currency": costo_currency_clean, # <-- FIXED
-                "periodo_inicio": periodo_inicio,       # <-- FIXED
-                "duracion_meses": duracion_meses        # <-- FIXED
+                "costoUnitario_original": clean_costoUnitario,
+                "costoUnitario_currency": costo_currency_clean,
+                "periodo_inicio": periodo_inicio,
+                "duracion_meses": duracion_meses
             }
-            
-            # 4. Calculate the required 'total' field for preview
-            total = cost['cantidad'] * cost['costoUnitario']
+
+            # 4. Calculate the required 'total' field for preview (in original currency)
+            total = cost['cantidad'] * cost['costoUnitario_original']
             cost['total'] = total
             
             mapped_costs.append(cost)
@@ -209,21 +209,21 @@ def lookup_recurring_services(service_codes):
             razon_social = client_data.get("razon_social")
             
             service = {
-                "id": cotizacion_code, 
+                "id": cotizacion_code,
                 "tipo_servicio": servicio,
                 "ubicacion": destino,
                 "Q": clean_q,
-                "P": clean_p,
-                
-                # Mapped fields
-                "p_currency": moneda_clean, 
+                "P_original": clean_p,
+                "P_currency": moneda_clean,
+
+                # Preview calculation in original currency
                 "ingreso": clean_q * clean_p,
-                
-                # Placeholder/Calculated fields
-                "CU1": cu1,
-                "CU2": cu2,
-                "proveedor": proveedor, # <-- FIXED
-                "cu_currency": cu_currency,
+
+                # Placeholder fields for costs
+                "CU1_original": cu1,
+                "CU2_original": cu2,
+                "CU_currency": cu_currency,
+                "proveedor": proveedor,
                 "egreso": (cu1 + cu2) * clean_q,
                 
                 # Original IDs retained for context
