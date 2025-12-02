@@ -67,7 +67,7 @@ def calculate_preview_route():
 
 @bp.route('/submit-transaction', methods=['POST'])
 @login_required 
-def submit_transaction_route():
+def create_transaction_route():
     data = request.get_json()
     if not data:
         return jsonify({"success": False, "error": "No data provided in the request"}), 400
