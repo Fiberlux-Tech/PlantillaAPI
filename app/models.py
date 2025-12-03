@@ -268,10 +268,18 @@ class MasterVariable(db.Model):
     variable_name = db.Column(db.String(64), nullable=False, index=True)
     variable_value = db.Column(db.Float, nullable=False)
     category = db.Column(db.String(64), nullable=False, index=True) # E.g., 'FINANCIAL', 'UNITARY_COST'
-    date_recorded = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    date_recorded = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Tracks who made the change
     comment = db.Column(db.String(255), nullable=True) # New field for comments
-    
+
+    # --- Database Indexes for Performance Optimization ---
+    __table_args__ = (
+        # Composite index for efficient latest value lookup
+        # Used in: variables.py - get_latest_master_variables() MAX(date_recorded) grouped by variable_name
+        # This index allows PostgreSQL to quickly find the most recent record for each variable
+        db.Index('idx_master_variable_name_date', 'variable_name', 'date_recorded'),
+    )
+
     # Relationship to the user who recorded the variable (optional, for convenience)
     recorder = db.relationship('User', backref='master_variables', lazy=True)
 
