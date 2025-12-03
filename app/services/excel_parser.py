@@ -184,11 +184,11 @@ def process_excel_file(excel_file):
         # Step 6: Assemble the Final Response
         # <-- MODIFIED: 'costoInstalacion' is now the PEN-based value from financial_metrics
         transaction_summary = {
-            **header_data, 
-            **financial_metrics, 
+            **header_data,
+            **financial_metrics,
             "costoInstalacion": financial_metrics.get('costoInstalacion'), # This is now PEN
-            "submissionDate": None, 
-            "ApprovalStatus": "BORRADOR"
+            "submissionDate": None,
+            "ApprovalStatus": "PENDING"
         }
 
         final_data_package = {"transactions": transaction_summary, "fixed_costs": fixed_costs_data,
