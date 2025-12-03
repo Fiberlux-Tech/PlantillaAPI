@@ -83,6 +83,7 @@ class Transaction(db.Model):
     submissionDate = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     approvalDate = db.Column(db.DateTime, nullable=True)
     rejection_note = db.Column(db.String(500), nullable=True)
+    financial_cache = db.Column(db.JSON, nullable=True)  # Stores cached financial metrics for APPROVED/REJECTED transactions
 
     # --- Database Indexes for Performance Optimization ---
     __table_args__ = (

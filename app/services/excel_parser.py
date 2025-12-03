@@ -45,51 +45,51 @@ def process_excel_file(excel_file):
         # --- END NEW BLOCK ---
 
 
-        # Step 3: Read & Extract Data
+        # --- PERFORMANCE OPTIMIZATION: Read Excel file ONCE ---
+        current_app.logger.info("Reading Excel file into memory (single read optimization)")
+        excel_file.seek(0) # Ensure we read from the start of the file stream
+        full_sheet_df = pd.read_excel(
+            excel_file,
+            sheet_name=config['PLANTILLA_SHEET_NAME'],
+            header=None
+        )
+        current_app.logger.info(f"Excel sheet loaded: {full_sheet_df.shape[0]} rows × {full_sheet_df.shape[1]} columns")
+        # ---------------------------------------------------------
+
+        # Step 3: Read & Extract Data from the in-memory DataFrame
         header_data = {}
-        # We removed 'unidadNegocio' from config, it won't be read here.
         for var_name, cell in config['VARIABLES_TO_EXTRACT'].items():
-            df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None)
             col_idx = ord(cell[0].upper()) - ord('A')
             row_idx = int(cell[1:]) - 1
-            value = df.iloc[row_idx, col_idx]
+            
+            if row_idx < full_sheet_df.shape[0] and col_idx < full_sheet_df.shape[1]:
+                value = full_sheet_df.iloc[row_idx, col_idx]
+            else:
+                current_app.logger.warning(f"Excel cell {cell} for variable '{var_name}' is out of bounds. Shape is {full_sheet_df.shape}.")
+                value = None
 
-            # Apply safe_float ONLY to fields expected to be numeric
-            # They will use the database defaults ('PEN', 'PEN')
             if var_name in ['MRC', 'NRC', 'plazoContrato', 'comisiones', 'companyID', 'orderID']: 
                 header_data[var_name] = safe_float(value)
             else:
-                # Keep as is for string fields like clientName, salesman
                 header_data[var_name] = value
 
-        # --- THIS LOGIC IS NOW OVERWRITTEN BY THE REFACTOR ---
-        # We still set comisiones to 0.0 here, but _calculate_financial_metrics
-        # will ignore it and calculate the real one.
+        # This logic is now OVERWRITTEN by the refactor. The real commission is calculated later.
         if 'comisiones' in header_data:
             header_data['comisiones'] = 0.0
         
-        # --- NEW BLOCK: INJECT MASTER VARIABLES INTO HEADER DATA ---
+        # --- INJECT MASTER VARIABLES INTO HEADER DATA ---
         header_data['tipoCambio'] = latest_rates['tipoCambio']
         header_data['costoCapitalAnual'] = latest_rates['costoCapital']
-        header_data['tasaCartaFianza'] = latest_rates['tasaCartaFianza'] # <-- ADD THIS LINE
+        header_data['tasaCartaFianza'] = latest_rates['tasaCartaFianza']
         header_data['aplicaCartaFianza'] = False # Default to NO
         # --- END INJECTION ---
-        
+
+        # Extract recurring services by slicing the in-memory DataFrame
         services_col_indices = [ord(c.upper()) - ord('A') for c in config['RECURRING_SERVICES_COLUMNS'].values()]
-        services_df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None, skiprows=config['RECURRING_SERVICES_START_ROW'], usecols=services_col_indices)
+        services_start_row = config['RECURRING_SERVICES_START_ROW']
+        services_df = full_sheet_df.iloc[services_start_row:, services_col_indices].copy()
 
-        # Debug logging
-        current_app.logger.info(f"--- DEBUG: Recurring Services DataFrame ---")
-        current_app.logger.info(f"Shape: {services_df.shape}")
-        current_app.logger.info(f"Columns: {len(services_df.columns)} (expected: {len(config['RECURRING_SERVICES_COLUMNS'])})")
-        current_app.logger.info(f"Empty: {services_df.empty}")
-        current_app.logger.info(f"Column indices: {services_col_indices}")
-        if not services_df.empty:
-            current_app.logger.info(f"First 3 rows:\n{services_df.head(3)}")
-
-        # Handle empty DataFrame case with detailed feedback
         if services_df.empty:
-            current_app.logger.warning("WARNING: Recurring Services DataFrame is empty (no rows)")
             recurring_services_data = []
         elif len(services_df.columns) != len(config['RECURRING_SERVICES_COLUMNS']):
             current_app.logger.error(f"ERROR: Recurring Services column mismatch - got {len(services_df.columns)}, expected {len(config['RECURRING_SERVICES_COLUMNS'])}")
@@ -98,10 +98,11 @@ def process_excel_file(excel_file):
             services_df.columns = config['RECURRING_SERVICES_COLUMNS'].keys()
             recurring_services_data = services_df.dropna(how='all').to_dict('records')
             current_app.logger.info(f"SUCCESS: Read {len(recurring_services_data)} recurring service records")
-            current_app.logger.info(f"--- END DEBUG ---\n")
 
+        # Extract fixed costs by slicing the in-memory DataFrame
         fixed_costs_col_indices = [ord(c.upper()) - ord('A') for c in config['FIXED_COSTS_COLUMNS'].values()]
-        fixed_costs_df = pd.read_excel(excel_file, sheet_name=config['PLANTILLA_SHEET_NAME'], header=None, skiprows=config['FIXED_COSTS_START_ROW'], usecols=fixed_costs_col_indices)
+        fixed_costs_start_row = config['FIXED_COSTS_START_ROW']
+        fixed_costs_df = full_sheet_df.iloc[fixed_costs_start_row:, fixed_costs_col_indices].copy()
 
         # Debug logging
         current_app.logger.info(f"--- DEBUG: Fixed Costs DataFrame ---")

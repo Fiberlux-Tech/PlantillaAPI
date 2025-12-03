@@ -521,31 +521,67 @@ def get_transaction_details(transaction_id):
         # ------------------------------------------
         
         if transaction:
-            # --- START NEW LOGIC ---
-            
-            # 1. Assemble the data package from the DB model
-            tx_data = transaction.to_dict()
-            tx_data['fixed_costs'] = [fc.to_dict() for fc in transaction.fixed_costs]
-            tx_data['recurring_services'] = [rs.to_dict() for rs in transaction.recurring_services]
-            
-            # Add GIGALAN fields to the dict for the commission calculator
-            tx_data['gigalan_region'] = transaction.gigalan_region
-            tx_data['gigalan_sale_type'] = transaction.gigalan_sale_type
-            tx_data['gigalan_old_mrc'] = transaction.gigalan_old_mrc
+            # --- PERFORMANCE OPTIMIZATION: Use cache for immutable transactions ---
+            # For APPROVED/REJECTED transactions, use cached metrics to avoid expensive recalculation
+            # For PENDING transactions, calculate on-the-fly for live "what-if" analysis
 
-            tx_data['tasaCartaFianza'] = transaction.tasaCartaFianza # <-- ADD THIS LINE
-            tx_data['aplicaCartaFianza'] = transaction.aplicaCartaFianza
-            
-            # 2. Call the calculator to get fresh metrics and the timeline
-            financial_metrics = _calculate_financial_metrics(tx_data)
-            clean_financial_metrics = _convert_numpy_types(financial_metrics)
+            if transaction.ApprovalStatus in ['APPROVED', 'REJECTED'] and transaction.financial_cache:
+                # Cache hit - use stored metrics (zero CPU cost)
+                clean_financial_metrics = transaction.financial_cache
+                transaction_details = transaction.to_dict()
+                transaction_details.update(clean_financial_metrics)
 
-            # 3. Merge the fresh calculations into the main transaction details
-            # This adds the 'timeline' object and ensures all KPIs are in sync.
-            transaction_details = transaction.to_dict()
-            transaction_details.update(clean_financial_metrics)
-            
-            # --- END NEW LOGIC ---
+            elif transaction.ApprovalStatus in ['APPROVED', 'REJECTED'] and not transaction.financial_cache:
+                # Cache miss (legacy data) - recalculate and self-heal the cache
+                current_app.logger.info("Cache miss for %s transaction %s - self-healing",
+                                       transaction.ApprovalStatus, transaction.id)
+
+                # 1. Assemble the data package from the DB model
+                tx_data = transaction.to_dict()
+                tx_data['fixed_costs'] = [fc.to_dict() for fc in transaction.fixed_costs]
+                tx_data['recurring_services'] = [rs.to_dict() for rs in transaction.recurring_services]
+                tx_data['gigalan_region'] = transaction.gigalan_region
+                tx_data['gigalan_sale_type'] = transaction.gigalan_sale_type
+                tx_data['gigalan_old_mrc'] = transaction.gigalan_old_mrc
+                tx_data['tasaCartaFianza'] = transaction.tasaCartaFianza
+                tx_data['aplicaCartaFianza'] = transaction.aplicaCartaFianza
+
+                # 2. Calculate and cache the metrics
+                financial_metrics = _calculate_financial_metrics(tx_data)
+                clean_financial_metrics = _convert_numpy_types(financial_metrics)
+
+                # 3. Self-heal: Update the cache for future requests
+                transaction.financial_cache = clean_financial_metrics
+                db.session.commit()
+
+                # 4. Merge into transaction details
+                transaction_details = transaction.to_dict()
+                transaction_details.update(clean_financial_metrics)
+
+            else:
+                # PENDING transaction - calculate on-the-fly for live editing
+                # 1. Assemble the data package from the DB model
+                tx_data = transaction.to_dict()
+                tx_data['fixed_costs'] = [fc.to_dict() for fc in transaction.fixed_costs]
+                tx_data['recurring_services'] = [rs.to_dict() for rs in transaction.recurring_services]
+
+                # Add GIGALAN fields to the dict for the commission calculator
+                tx_data['gigalan_region'] = transaction.gigalan_region
+                tx_data['gigalan_sale_type'] = transaction.gigalan_sale_type
+                tx_data['gigalan_old_mrc'] = transaction.gigalan_old_mrc
+                tx_data['tasaCartaFianza'] = transaction.tasaCartaFianza
+                tx_data['aplicaCartaFianza'] = transaction.aplicaCartaFianza
+
+                # 2. Call the calculator to get fresh metrics and the timeline
+                financial_metrics = _calculate_financial_metrics(tx_data)
+                clean_financial_metrics = _convert_numpy_types(financial_metrics)
+
+                # 3. Merge the fresh calculations into the main transaction details
+                # This adds the 'timeline' object and ensures all KPIs are in sync.
+                transaction_details = transaction.to_dict()
+                transaction_details.update(clean_financial_metrics)
+
+            # --- END PERFORMANCE OPTIMIZATION ---
 
             # --- FIX: Recalculate _pen fields if missing (for legacy data) ---
             recurring_services_list = [rs.to_dict() for rs in transaction.recurring_services]
@@ -817,6 +853,12 @@ def approve_transaction(transaction_id):
             transaction.MRC_pen = clean_metrics.get('MRC_pen')
             transaction.NRC_original = clean_metrics.get('NRC_original')
             transaction.NRC_pen = clean_metrics.get('NRC_pen')
+
+            # --- PERFORMANCE OPTIMIZATION: Cache financial metrics ---
+            # Store the complete calculated metrics in financial_cache
+            # This prevents expensive recalculations when viewing approved transactions
+            transaction.financial_cache = clean_metrics
+            # --------------------------------------------------------
         except Exception as calc_error:
             current_app.logger.error("Error recalculating metrics before approval for ID %s: %s", transaction_id, str(calc_error), exc_info=True)
             # Continue with approval even if recalculation fails (log the error but don't block)
@@ -887,6 +929,12 @@ def reject_transaction(transaction_id, rejection_note=None):
             transaction.MRC_pen = clean_metrics.get('MRC_pen')
             transaction.NRC_original = clean_metrics.get('NRC_original')
             transaction.NRC_pen = clean_metrics.get('NRC_pen')
+
+            # --- PERFORMANCE OPTIMIZATION: Cache financial metrics ---
+            # Store the complete calculated metrics in financial_cache
+            # This prevents expensive recalculations when viewing rejected transactions
+            transaction.financial_cache = clean_metrics
+            # --------------------------------------------------------
         except Exception as calc_error:
             current_app.logger.error("Error recalculating metrics before rejection for ID %s: %s", transaction_id, str(calc_error), exc_info=True)
             # Continue with rejection even if recalculation fails (log the error but don't block)
