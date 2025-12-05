@@ -303,6 +303,146 @@ def _calculate_financial_metrics(data):
 
 # --- MAIN SERVICE FUNCTIONS ---
 
+def _update_transaction_data(transaction, data_payload):
+    """
+    Central helper function to update a transaction's scalar fields and relationships.
+
+    This function:
+    1. Updates scalar fields (MRC, Unit, Contract Term, etc.) on the transaction model
+    2. Replaces FixedCost and RecurringService records by clearing and recreating them
+    3. Recalculates all financial metrics (VAN, TIR, Commissions) based on new values
+    4. Does NOT change the transaction status or ID
+
+    Args:
+        transaction: The Transaction object to update
+        data_payload: Dictionary containing updated transaction data with structure:
+            {
+                'transactions': {...},  # Updated transaction fields
+                'fixed_costs': [...],   # New/updated fixed costs
+                'recurring_services': [...] # New/updated recurring services
+            }
+
+    Returns:
+        tuple: (success_dict, None) on success, (error_dict, status_code) on failure
+    """
+    try:
+        tx_data = data_payload.get('transactions', {})
+        fixed_costs_data = data_payload.get('fixed_costs', [])
+        recurring_services_data = data_payload.get('recurring_services', [])
+
+        # 1. Update scalar fields on the transaction model
+        updatable_fields = [
+            'unidadNegocio', 'clientName', 'companyID', 'orderID',
+            'tipoCambio', 'MRC_currency', 'NRC_currency',
+            'plazoContrato', 'costoCapitalAnual',
+            'tasaCartaFianza', 'aplicaCartaFianza',
+            'gigalan_region', 'gigalan_sale_type', 'gigalan_old_mrc'
+        ]
+
+        for field in updatable_fields:
+            if field in tx_data:
+                setattr(transaction, field, tx_data[field])
+
+        # 2. Replace FixedCost records (clear and recreate)
+        # Delete all existing fixed costs for this transaction
+        FixedCost.query.filter_by(transaction_id=transaction.id).delete()
+
+        # Create new fixed costs from payload
+        for cost_item in fixed_costs_data:
+            new_cost = FixedCost(
+                transaction=transaction,
+                categoria=cost_item.get('categoria'),
+                tipo_servicio=cost_item.get('tipo_servicio'),
+                ticket=cost_item.get('ticket'),
+                ubicacion=cost_item.get('ubicacion'),
+                cantidad=cost_item.get('cantidad'),
+                costoUnitario_original=cost_item.get('costoUnitario_original'),
+                costoUnitario_currency=cost_item.get('costoUnitario_currency', 'USD'),
+                costoUnitario_pen=cost_item.get('costoUnitario_pen'),
+                periodo_inicio=cost_item.get('periodo_inicio', 0),
+                duracion_meses=cost_item.get('duracion_meses', 1)
+            )
+            db.session.add(new_cost)
+
+        # 3. Replace RecurringService records (clear and recreate)
+        # Delete all existing recurring services for this transaction
+        RecurringService.query.filter_by(transaction_id=transaction.id).delete()
+
+        # Create new recurring services from payload
+        tipoCambio = transaction.tipoCambio or 1
+        for service_item in recurring_services_data:
+            # Ensure _pen fields are calculated if missing
+            if service_item.get('P_pen') in [0, None, '']:
+                P_original = service_item.get('P_original', 0)
+                P_currency = service_item.get('P_currency', 'PEN')
+                service_item['P_pen'] = _normalize_to_pen(P_original, P_currency, tipoCambio)
+
+            if service_item.get('CU1_pen') in [0, None, '']:
+                CU1_original = service_item.get('CU1_original', 0)
+                CU_currency = service_item.get('CU_currency', 'USD')
+                service_item['CU1_pen'] = _normalize_to_pen(CU1_original, CU_currency, tipoCambio)
+
+            if service_item.get('CU2_pen') in [0, None, '']:
+                CU2_original = service_item.get('CU2_original', 0)
+                CU_currency = service_item.get('CU_currency', 'USD')
+                service_item['CU2_pen'] = _normalize_to_pen(CU2_original, CU_currency, tipoCambio)
+
+            new_service = RecurringService(
+                transaction=transaction,
+                tipo_servicio=service_item.get('tipo_servicio'),
+                nota=service_item.get('nota'),
+                ubicacion=service_item.get('ubicacion'),
+                Q=service_item.get('Q'),
+                P_original=service_item.get('P_original'),
+                P_currency=service_item.get('P_currency', 'PEN'),
+                P_pen=service_item.get('P_pen'),
+                CU1_original=service_item.get('CU1_original'),
+                CU2_original=service_item.get('CU2_original'),
+                CU_currency=service_item.get('CU_currency', 'USD'),
+                CU1_pen=service_item.get('CU1_pen'),
+                CU2_pen=service_item.get('CU2_pen'),
+                proveedor=service_item.get('proveedor')
+            )
+            db.session.add(new_service)
+
+        # 4. Flush changes to ensure relationships are updated before recalculation
+        db.session.flush()
+
+        # 5. Recalculate financial metrics based on new values
+        # Assemble data package for recalculation
+        recalc_data = transaction.to_dict()
+        recalc_data['fixed_costs'] = [fc.to_dict() for fc in transaction.fixed_costs]
+        recalc_data['recurring_services'] = [rs.to_dict() for rs in transaction.recurring_services]
+        recalc_data['gigalan_region'] = transaction.gigalan_region
+        recalc_data['gigalan_sale_type'] = transaction.gigalan_sale_type
+        recalc_data['gigalan_old_mrc'] = transaction.gigalan_old_mrc
+        recalc_data['tasaCartaFianza'] = transaction.tasaCartaFianza
+        recalc_data['aplicaCartaFianza'] = transaction.aplicaCartaFianza
+
+        # Calculate financial metrics
+        financial_metrics = _calculate_financial_metrics(recalc_data)
+        clean_metrics = _convert_numpy_types(financial_metrics)
+
+        # 6. Update transaction with fresh calculations
+        for key, value in clean_metrics.items():
+            if hasattr(transaction, key):
+                setattr(transaction, key, value)
+
+        transaction.costoInstalacion = clean_metrics.get('costoInstalacion')
+        transaction.MRC_original = clean_metrics.get('MRC_original')
+        transaction.MRC_pen = clean_metrics.get('MRC_pen')
+        transaction.NRC_original = clean_metrics.get('NRC_original')
+        transaction.NRC_pen = clean_metrics.get('NRC_pen')
+
+        return {"success": True}, None
+
+    except Exception as e:
+        import traceback
+        print("--- ERROR DURING TRANSACTION UPDATE ---")
+        print(traceback.format_exc())
+        print("--- END ERROR ---")
+        return {"success": False, "error": f"Error updating transaction: {str(e)}"}, 500
+
 @login_required
 def calculate_preview_metrics(request_data):
     """
@@ -805,11 +945,66 @@ def save_transaction(data):
         print("--- END ERROR ---")
         return {"success": False, "error": f"Database error: {str(e)}"}
 
+@login_required
+def update_transaction_content(transaction_id, data_payload):
+    """
+    Updates a PENDING transaction's content without changing its status or ID.
+    This is the dedicated service for the "Edit" feature.
+
+    Args:
+        transaction_id: The ID of the transaction to update
+        data_payload: Dictionary containing updated transaction data.
+                     Structure: {'transactions': {...}, 'fixed_costs': [...], 'recurring_services': [...]}
+
+    Returns:
+        Success response with updated transaction details, or error response with status code
+
+    Access Control:
+        - SALES users can only update their own transactions
+        - FINANCE/ADMIN users can update any transaction
+    """
+    try:
+        # 1. Retrieve the transaction
+        transaction = Transaction.query.get(transaction_id)
+        if not transaction:
+            return {"success": False, "error": "Transaction not found."}, 404
+
+        # 2. Validate transaction is PENDING
+        if transaction.ApprovalStatus != 'PENDING':
+            return {"success": False, "error": f"Cannot edit transaction. Only 'PENDING' transactions can be edited. Current status: '{transaction.ApprovalStatus}'."}, 403
+
+        # 3. Access control: SALES can only edit their own transactions
+        if current_user.role == 'SALES' and transaction.salesman != current_user.username:
+            return {"success": False, "error": "You do not have permission to edit this transaction."}, 403
+
+        # 4. Apply updates using the central helper
+        update_result, error_status = _update_transaction_data(transaction, data_payload)
+        if error_status:
+            db.session.rollback()
+            return update_result, error_status
+
+        # 5. Commit the changes
+        db.session.commit()
+
+        # 6. Return the updated transaction details
+        return get_transaction_details(transaction_id)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error("Error updating transaction content for ID %s: %s", transaction_id, str(e), exc_info=True)
+        return {"success": False, "error": f"Error updating transaction: {str(e)}"}, 500
+
 @login_required # <-- SECURITY WRAPPER ADDED
-def approve_transaction(transaction_id):
+def approve_transaction(transaction_id, data_payload=None):
     """
     Approves a transaction by updating its status and approval date.
     Immutability Check: Only allows approval if status is 'PENDING'.
+
+    Args:
+        transaction_id: The ID of the transaction to approve
+        data_payload: Optional dictionary containing updated transaction data.
+                     If provided, updates the transaction before approval.
+                     Structure: {'transactions': {...}, 'fixed_costs': [...], 'recurring_services': [...]}
 
     CRITICAL FIX: Recalculates financial metrics before approval to ensure
     database has the latest calculated values (prevents stale data).
@@ -824,6 +1019,14 @@ def approve_transaction(transaction_id):
             # Block approval if not pending
             return {"success": False, "error": f"Cannot approve transaction. Current status is '{transaction.ApprovalStatus}'. Only 'PENDING' transactions can be approved."}, 400
         # -------------------------------
+
+        # --- NEW: Apply data updates if provided ---
+        if data_payload:
+            update_result, error_status = _update_transaction_data(transaction, data_payload)
+            if error_status:
+                db.session.rollback()
+                return update_result, error_status
+        # ------------------------------------------
 
         # --- CRITICAL FIX: Recalculate metrics before approval ---
         # This ensures the database contains the latest calculated values
@@ -882,10 +1085,17 @@ def approve_transaction(transaction_id):
         return {"success": False, "error": f"Database error: {str(e)}"}, 500
 
 @login_required
-def reject_transaction(transaction_id, rejection_note=None):
+def reject_transaction(transaction_id, rejection_note=None, data_payload=None):
     """
     Rejects a transaction by updating its status and approval date.
     Immutability Check: Only allows rejection if status is 'PENDING'.
+
+    Args:
+        transaction_id: The ID of the transaction to reject
+        rejection_note: Optional note explaining the rejection reason
+        data_payload: Optional dictionary containing updated transaction data.
+                     If provided, updates the transaction before rejection.
+                     Structure: {'transactions': {...}, 'fixed_costs': [...], 'recurring_services': [...]}
 
     CRITICAL FIX: Recalculates financial metrics before rejection to ensure
     database has the latest calculated values (prevents stale data).
@@ -900,6 +1110,14 @@ def reject_transaction(transaction_id, rejection_note=None):
             # Block rejection if not pending
             return {"success": False, "error": f"Cannot reject transaction. Current status is '{transaction.ApprovalStatus}'. Only 'PENDING' transactions can be rejected."}, 400
         # -------------------------------
+
+        # --- NEW: Apply data updates if provided ---
+        if data_payload:
+            update_result, error_status = _update_transaction_data(transaction, data_payload)
+            if error_status:
+                db.session.rollback()
+                return update_result, error_status
+        # ------------------------------------------
 
         # --- CRITICAL FIX: Recalculate metrics before rejection ---
         # This ensures the database contains the latest calculated values

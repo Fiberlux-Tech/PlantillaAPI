@@ -16,6 +16,7 @@ from app.services.transactions import (
     get_transaction_details,
     approve_transaction,
     reject_transaction,
+    update_transaction_content,
     recalculate_commission_and_metrics,
     calculate_preview_metrics
 )
@@ -83,20 +84,59 @@ def get_transactions_route():
     return _handle_service_result(result)
 
 @bp.route('/transaction/<string:transaction_id>', methods=['GET'])
-@login_required 
+@login_required
 def get_transaction_details_route(transaction_id):
-    result = get_transaction_details(transaction_id) 
+    result = get_transaction_details(transaction_id)
     # Service returns a tuple (dict, 404 or 500) on failure
     return _handle_service_result(result, default_error_status=404)
+
+@bp.route('/transaction/<string:transaction_id>', methods=['PUT'])
+@login_required
+def update_transaction_route(transaction_id):
+    """
+    Updates a PENDING transaction's content without changing its status or ID.
+    This is the dedicated endpoint for the "Edit/Save" feature.
+
+    Access Control:
+        - SALES: Can only update their own PENDING transactions
+        - FINANCE/ADMIN: Can update any PENDING transaction
+
+    Request Body:
+        {
+            "transactions": {...},      # Updated transaction fields
+            "fixed_costs": [...],       # New/updated fixed costs
+            "recurring_services": [...] # New/updated recurring services
+        }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "No data provided in the request"}), 400
+
+    result = update_transaction_content(transaction_id, data)
+    # Service returns a tuple (dict, 403, 404, or 500) on failure
+    return _handle_service_result(result)
 
 
 # --- SECURED STATUS CHANGE & CALCULATION ROUTES ---
 
 @bp.route('/transaction/approve/<string:transaction_id>', methods=['POST'])
 @login_required
-@finance_admin_required 
+@finance_admin_required
 def approve_transaction_route(transaction_id):
-    result = approve_transaction(transaction_id)
+    # Parse optional request body containing updated transaction data
+    data = request.get_json() or {}
+
+    # Check if data contains transaction updates (beyond just metadata)
+    # If the body has 'transactions', 'fixed_costs', or 'recurring_services', treat it as an update payload
+    has_update_data = any(key in data for key in ['transactions', 'fixed_costs', 'recurring_services'])
+
+    if has_update_data:
+        # Pass the data payload to the service for pre-approval updates
+        result = approve_transaction(transaction_id, data_payload=data)
+    else:
+        # No update data, just approve with existing values
+        result = approve_transaction(transaction_id)
+
     # Service returns a tuple (dict, 400, 404, or 500) on failure
     return _handle_service_result(result)
 
@@ -104,7 +144,7 @@ def approve_transaction_route(transaction_id):
 @login_required
 @finance_admin_required
 def reject_transaction_route(transaction_id):
-    # Extract optional rejection note from request body
+    # Extract optional rejection note and transaction updates from request body
     data = request.get_json() or {}
     rejection_note = data.get('rejection_note')
 
@@ -115,8 +155,17 @@ def reject_transaction_route(transaction_id):
             "error": "Rejection note cannot exceed 500 characters."
         }), 400
 
-    # Pass note to service layer
-    result = reject_transaction(transaction_id, rejection_note=rejection_note)
+    # Check if data contains transaction updates (beyond just the rejection note)
+    # If the body has 'transactions', 'fixed_costs', or 'recurring_services', treat it as an update payload
+    has_update_data = any(key in data for key in ['transactions', 'fixed_costs', 'recurring_services'])
+
+    if has_update_data:
+        # Pass both the rejection note and data payload to the service
+        result = reject_transaction(transaction_id, rejection_note=rejection_note, data_payload=data)
+    else:
+        # Only rejection note, no transaction updates
+        result = reject_transaction(transaction_id, rejection_note=rejection_note)
+
     # Service returns a tuple (dict, 400, 404, or 500) on failure
     return _handle_service_result(result)
 
