@@ -5102,3 +5102,151 @@ psycopg2.OperationalError: connection to server at "192.168.30.80", port 5432 fa
 [2025-12-05 23:17:44 +0000] [1090598] [DEBUG] GET /api/kpi/average-gross-margin
 [2025-12-05 23:17:44 +0000] [1090597] [DEBUG] GET /api/transaction/FLX25-1205224610015853
 [2025-12-05 23:17:46 +0000] [1090597] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:28:24 +0000] [1090597] [DEBUG] GET /auth/me
+[2025-12-05 23:28:25 +0000] [1090597] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-05 23:28:25 +0000] [1090599] [DEBUG] GET /api/transactions
+[2025-12-05 23:28:25 +0000] [1090599] [DEBUG] GET /api/kpi/pending-count
+[2025-12-05 23:28:25 +0000] [1090597] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-05 23:28:25 +0000] [1090598] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-05 23:28:26 +0000] [1090598] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:28:27 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:28:36 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:28:41 +0000] [1090598] [DEBUG] PUT /api/transaction/[object%20Object]
+[2025-12-05 23:28:53 +0000] [1090597] [DEBUG] GET /api/transaction/FLX25-1205202859988011
+[2025-12-05 23:28:55 +0000] [1090597] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:28:57 +0000] [1090597] [DEBUG] GET /api/transaction/FLX25-1205223025680882
+[2025-12-05 23:28:59 +0000] [1090597] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:29:06 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:29:06 +0000] [1090598] [DEBUG] PUT /api/transaction/[object%20Object]
+[2025-12-05 23:29:10 +0000] [1090598] [DEBUG] PUT /api/transaction/[object%20Object]
+[2025-12-05 23:44:21 +0000] [1090597] [DEBUG] GET /auth/me
+[2025-12-05 23:44:21 +0000] [1090599] [DEBUG] GET /api/transactions
+[2025-12-05 23:44:21 +0000] [1090597] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-05 23:44:21 +0000] [1090598] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-05 23:44:21 +0000] [1090597] [DEBUG] GET /api/kpi/pending-count
+[2025-12-05 23:44:21 +0000] [1090598] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-05 23:44:25 +0000] [1090599] [DEBUG] GET /auth/me
+[2025-12-05 23:44:25 +0000] [1090598] [DEBUG] GET /api/transactions
+[2025-12-05 23:44:25 +0000] [1090599] [DEBUG] GET /api/kpi/pending-count
+[2025-12-05 23:44:25 +0000] [1090597] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-05 23:44:25 +0000] [1090599] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-05 23:44:25 +0000] [1090597] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-05 23:44:26 +0000] [1090597] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:44:27 +0000] [1090599] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:44:29 +0000] [1090597] [DEBUG] GET /auth/me
+[2025-12-05 23:44:29 +0000] [1090598] [DEBUG] GET /api/kpi/pending-count
+[2025-12-05 23:44:29 +0000] [1090597] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-05 23:44:29 +0000] [1090599] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-05 23:44:29 +0000] [1090597] [DEBUG] GET /api/transactions
+[2025-12-05 23:44:29 +0000] [1090599] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-05 23:44:31 +0000] [1090597] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:44:32 +0000] [1090597] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:44:40 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:44:41 +0000] [1090597] [DEBUG] PUT /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:47:53 +0000] [1090597] [DEBUG] GET /auth/me
+[2025-12-05 23:47:53 +0000] [1090599] [DEBUG] GET /api/transactions
+[2025-12-05 23:47:53 +0000] [1090597] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-05 23:47:53 +0000] [1090597] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-05 23:47:53 +0000] [1090598] [DEBUG] GET /api/kpi/pending-count
+[2025-12-05 23:47:53 +0000] [1090599] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-05 23:47:54 +0000] [1090599] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:47:55 +0000] [1090597] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:47:58 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:47:59 +0000] [1090598] [DEBUG] PUT /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:53:53 +0000] [1090599] [DEBUG] GET /auth/me
+[2025-12-05 23:53:53 +0000] [1090597] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-05 23:53:53 +0000] [1090598] [DEBUG] GET /api/transactions
+[2025-12-05 23:53:53 +0000] [1090598] [DEBUG] GET /api/kpi/pending-count
+[2025-12-05 23:53:53 +0000] [1090597] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-05 23:53:53 +0000] [1090599] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-05 23:53:54 +0000] [1090599] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:53:56 +0000] [1090599] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:54:00 +0000] [1090599] [DEBUG] POST /api/calculate-preview
+[2025-12-05 23:54:01 +0000] [1090599] [DEBUG] PUT /api/transaction/FLX25-1205224610015853
+[2025-12-05 23:54:06 +0000] [1090599] [DEBUG] GET /auth/me
+[2025-12-05 23:54:06 +0000] [1090599] [DEBUG] GET /api/transactions
+[2025-12-05 23:54:06 +0000] [1090598] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-05 23:54:06 +0000] [1090597] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-05 23:54:06 +0000] [1090598] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-05 23:54:06 +0000] [1090597] [DEBUG] GET /api/kpi/pending-count
+[2025-12-06 15:14:52 +0000] [1090598] [DEBUG] GET /auth/me
+[2025-12-06 15:14:52 +0000] [1090598] [DEBUG] GET /api/transactions
+[2025-12-06 15:14:52 +0000] [1090599] [DEBUG] GET /api/kpi/pending-count
+[2025-12-06 15:14:52 +0000] [1090597] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-06 15:14:52 +0000] [1090598] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-06 15:14:52 +0000] [1090598] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-10 21:57:31 +0000] [1090599] [DEBUG] GET /auth/me
+[2025-12-10 21:57:39 +0000] [1090599] [DEBUG] POST /auth/login
+[2025-12-10 21:57:44 +0000] [1090599] [DEBUG] POST /auth/login
+[2025-12-10 21:57:46 +0000] [1090598] [DEBUG] GET /api/kpi/pending-count
+[2025-12-10 21:57:46 +0000] [1090597] [DEBUG] GET /api/transactions
+[2025-12-10 21:57:46 +0000] [1090598] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-10 21:57:46 +0000] [1090598] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-10 21:57:46 +0000] [1090598] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-10 21:57:51 +0000] [1090598] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-10 21:57:53 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-10 21:58:53 +0000] [1090597] [DEBUG] GET /auth/me
+[2025-12-10 21:58:53 +0000] [1090598] [DEBUG] GET /api/transactions
+[2025-12-10 21:58:53 +0000] [1090597] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-10 21:58:53 +0000] [1090597] [DEBUG] GET /api/kpi/pending-count
+[2025-12-10 21:58:53 +0000] [1090598] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-10 21:58:53 +0000] [1090599] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-10 22:03:18 +0000] [1090599] [DEBUG] GET /auth/me
+[2025-12-10 22:03:18 +0000] [1090598] [DEBUG] GET /api/transactions
+[2025-12-10 22:03:18 +0000] [1090598] [DEBUG] GET /api/kpi/pending-mrc
+[2025-12-10 22:03:18 +0000] [1090597] [DEBUG] GET /api/kpi/pending-count
+[2025-12-10 22:03:18 +0000] [1090599] [DEBUG] GET /api/kpi/pending-comisiones
+[2025-12-10 22:03:18 +0000] [1090598] [DEBUG] GET /api/kpi/average-gross-margin
+[2025-12-10 22:03:19 +0000] [1090598] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-10 22:03:21 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-10 22:03:28 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-10 22:03:37 +0000] [1090598] [DEBUG] GET /api/transaction/FLX25-1205223025680882
+[2025-12-10 22:03:39 +0000] [1090598] [DEBUG] POST /api/calculate-preview
+[2025-12-10 22:03:39 +0000] [1090598] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-10 22:03:43 +0000] [1090597] [DEBUG] POST /api/calculate-preview
+[2025-12-10 22:03:43 +0000] [1090599] [DEBUG] PUT /api/transaction/FLX25-1205224610015853
+[2025-12-10 22:03:46 +0000] [1090599] [DEBUG] GET /api/transaction/FLX25-1205224610015853
+[2025-12-10 22:03:47 +0000] [1090599] [DEBUG] POST /api/calculate-preview
+[2025-12-10 22:03:53 +0000] [1090599] [DEBUG] POST /api/calculate-preview
+[2025-12-10 22:03:54 +0000] [1090599] [DEBUG] PUT /api/transaction/FLX25-1205224610015853
+[2025-12-24 15:39:05 +0000] [1047980] [INFO] Handling signal: term
+[2025-12-24 15:39:07 +0000] [1090599] [INFO] Worker exiting (pid: 1090599)
+[2025-12-24 15:39:07 +0000] [1090597] [INFO] Worker exiting (pid: 1090597)
+[2025-12-24 15:39:07 +0000] [1090598] [INFO] Worker exiting (pid: 1090598)
+--- DIAGNOSTIC: Attempting to commit transaction with temporary ID: FLX25-1205202336063198 by user Sebastian Ternero ---
+--- DIAGNOSTIC: Commit successful for transaction ID: FLX25-1205202336063198 ---
+--- DIAGNOSTIC: Email sent successfully to mesadeprecios@fiberlux.pe, sternero@fiberlux.pe ---
+--- DIAGNOSTIC: Email sent successfully to sternero@fiberlux.pe ---
+--- DIAGNOSTIC: Attempting to commit transaction with temporary ID: FLX25-1205202859988011 by user Sebastian Ternero ---
+--- DIAGNOSTIC: Commit successful for transaction ID: FLX25-1205202859988011 ---
+--- DIAGNOSTIC: Email sent successfully to mesadeprecios@fiberlux.pe, sternero@fiberlux.pe ---
+--- DIAGNOSTIC: Attempting to commit transaction with temporary ID: FLX25-1205223025680882 by user Sebastian Ternero ---
+--- DIAGNOSTIC: Commit successful for transaction ID: FLX25-1205223025680882 ---
+--- DIAGNOSTIC: Email sent successfully to mesadeprecios@fiberlux.pe, sternero@fiberlux.pe ---
+--- DIAGNOSTIC: Attempting to commit transaction with temporary ID: FLX25-1205224610015853 by user Sebastian Ternero ---
+--- DIAGNOSTIC: Commit successful for transaction ID: FLX25-1205224610015853 ---
+--- DIAGNOSTIC: Email sent successfully to mesadeprecios@fiberlux.pe, sternero@fiberlux.pe ---
+--- DIAGNOSTIC: Email sent successfully to sternero@fiberlux.pe ---
+--- DIAGNOSTIC: Email sent successfully to sternero@fiberlux.pe ---
+[2025-12-24 15:39:37 +0000] [1267563] [INFO] Starting gunicorn 23.0.0
+[2025-12-24 15:39:37 +0000] [1267563] [ERROR] Connection in use: ('0.0.0.0', 5000)
+[2025-12-24 15:39:37 +0000] [1267563] [ERROR] connection to ('0.0.0.0', 5000) failed: [Errno 98] Address already in use
+[2025-12-24 15:39:38 +0000] [1267563] [ERROR] Connection in use: ('0.0.0.0', 5000)
+[2025-12-24 15:39:38 +0000] [1267563] [ERROR] connection to ('0.0.0.0', 5000) failed: [Errno 98] Address already in use
+[2025-12-24 15:39:39 +0000] [1267563] [ERROR] Connection in use: ('0.0.0.0', 5000)
+[2025-12-24 15:39:39 +0000] [1267563] [ERROR] connection to ('0.0.0.0', 5000) failed: [Errno 98] Address already in use
+[2025-12-24 15:39:40 +0000] [1267563] [ERROR] Connection in use: ('0.0.0.0', 5000)
+[2025-12-24 15:39:40 +0000] [1267563] [ERROR] connection to ('0.0.0.0', 5000) failed: [Errno 98] Address already in use
+[2025-12-24 15:39:41 +0000] [1267563] [ERROR] Connection in use: ('0.0.0.0', 5000)
+[2025-12-24 15:39:41 +0000] [1267563] [ERROR] connection to ('0.0.0.0', 5000) failed: [Errno 98] Address already in use
+[2025-12-24 15:39:42 +0000] [1267563] [ERROR] Can't connect to ('0.0.0.0', 5000)
+[2025-12-24 15:39:52 +0000] [1267671] [INFO] Starting gunicorn 23.0.0
+[2025-12-24 15:39:52 +0000] [1267671] [ERROR] Connection in use: ('0.0.0.0', 5000)
+[2025-12-24 15:39:52 +0000] [1267671] [ERROR] connection to ('0.0.0.0', 5000) failed: [Errno 98] Address already in use
+[2025-12-24 15:39:53 +0000] [1267671] [ERROR] Connection in use: ('0.0.0.0', 5000)
+[2025-12-24 15:39:53 +0000] [1267671] [ERROR] connection to ('0.0.0.0', 5000) failed: [Errno 98] Address already in use
+[2025-12-24 15:39:54 +0000] [1267671] [INFO] Listening at: http://0.0.0.0:5000 (1267671)
+[2025-12-24 15:39:54 +0000] [1267671] [INFO] Using worker: sync
+[2025-12-24 15:39:54 +0000] [1267673] [INFO] Booting worker with pid: 1267673
+[2025-12-24 15:39:54 +0000] [1267674] [INFO] Booting worker with pid: 1267674
+[2025-12-24 15:39:54 +0000] [1267675] [INFO] Booting worker with pid: 1267675

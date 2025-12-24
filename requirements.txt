@@ -6,5 +6,7 @@ openpyxl
 Flask-Cors
 Flask-SQLAlchemy
 Flask-Migrate
+Flask-Login
 psycopg2-binary
 python-dotenv
+gunicorn==23.0.0

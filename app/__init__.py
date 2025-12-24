@@ -1,6 +1,7 @@
 # app/__init__.py
 
 import os
+import sys
 import logging
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -19,7 +20,8 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # Configure logging to show INFO level messages
+    # Configure logging to show INFO level messages (MOVED UP)
+    # This must happen BEFORE validate_config() so validation warnings appear in logs
     app.logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
     handler.setLevel(logging.INFO)
@@ -27,19 +29,25 @@ def create_app():
     handler.setFormatter(formatter)
     app.logger.addHandler(handler)
 
+    # --- CRITICAL: Validate configuration before proceeding ---
+    # This ensures the app FAILS FAST if critical settings are missing
+    # rather than running with incorrect database connections
+    try:
+        Config.validate_config()
+    except ValueError as e:
+        # Log the error and re-raise to prevent app startup
+        print(str(e), file=sys.stderr)
+        raise
+    # ----------------------------------------------------------
+
     db.init_app(app)
     migrate.init_app(app, db)
-    
+
     # CORS is now CRITICAL because your frontend and backend
     # are on the same domain but served by different processes.
-    CORS(app, supports_credentials=True, origins=[
-        "http://10.100.23.164", # Your specific frontend IP
-        "http://127.0.0.1:5000",  # Allow localhost access
-        "http://localhost:5000",  # Allow localhost access
-        "http://127.0.0.1",
-        "http://localhost"
-    ])
-    
+    # Origins are configured via environment variables for flexibility.
+    CORS(app, supports_credentials=True, origins=app.config['CORS_ALLOWED_ORIGINS'])
+
     login_manager.init_app(app) 
     
     # --- 1. SET THE CORRECT 401 HANDLER FOR A SPA ---
